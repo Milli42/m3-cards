@@ -31,7 +31,15 @@ import {
   shouldCloseOnBackdropClick,
 } from "./shared/popup-card";
 import { discoveryChangeMatters } from "./shared/should-update";
-import { SWITCH_OVERVIEW_DOMAINS, isOverviewSwitch, switchOverviewTap } from "./shared/switches-overview";
+import {
+  SWITCH_OVERVIEW_DOMAINS,
+  includesOverviewMediaPlayer,
+  isOverviewMediaPlayer,
+  isOverviewSwitch,
+  isOverviewSwitchOn,
+  switchOverviewService,
+  switchOverviewTap,
+} from "./shared/switches-overview";
 import { TemplatedCard } from "./shared/templated-card";
 
 console.info(
@@ -133,14 +141,19 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
       include_entities: cfg.include_entities,
       exclude_entities: cfg.exclude_entities,
     };
-    const ids = Object.keys(hass.states).filter(isOverviewSwitch);
+    const include = new Set(cfg.include_entities);
+    const discoverMedia = cfg.include_media_players === true || [...include].some(isOverviewMediaPlayer);
+    const domains = SWITCH_OVERVIEW_DOMAINS.filter((domain) => domain !== "media_player" || discoverMedia);
+    const ids = Object.keys(hass.states).filter(
+      (id) => isOverviewSwitch(id) && (!isOverviewMediaPlayer(id) || discoverMedia),
+    );
     const key = JSON.stringify([filter, ids]);
     if (key === this._discovery?.key && sameRegistries(hass, this._discovery.registries)) return;
     const { entities, devices, areas } = hass;
     const discovery = { key, registries: { entities, devices, areas } };
     this._discovery = discovery;
 
-    discoverLightRooms(hass, { domains: [...SWITCH_OVERVIEW_DOMAINS], filter })
+    discoverLightRooms(hass, { domains, filter, includeUnassigned: isOverviewMediaPlayer })
       .then((rooms) => {
         if (this._discovery === discovery) this._discovered = rooms;
       })
@@ -163,14 +176,23 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
             (id) => isOverviewSwitch(id) && !exclude.has(id) && (!include.size || include.has(id)),
           ),
         }))
-      : this._discovered.map((room) => ({ ...room, key: `area:${room.areaId}` }));
+      : this._discovered.flatMap((room) => {
+          const entities = room.entities.filter((id) =>
+            !isOverviewMediaPlayer(id) || includesOverviewMediaPlayer(
+              include.has(id),
+              cfg.include_media_players === true,
+              hass.states[id]?.attributes.supported_features,
+            ),
+          );
+          return entities.length ? [{ ...room, entities, key: `area:${room.areaId}` }] : [];
+        });
 
     return rooms.map((room) => {
       const entities = room.entities.filter((id) => hass.states[id] && showState(id));
       return {
         ...room,
         entities,
-        onCount: entities.filter((id) => hass.states[id].state === "on").length,
+        onCount: entities.filter((id) => isOverviewSwitchOn(id, hass.states[id].state)).length,
         unavailable: entities.length === 0,
       };
     });
@@ -179,13 +201,14 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
   private _entityTiles(hass: HomeAssistant, room: SwitchTile): SwitchTile[] {
     return room.entities.map((id) => {
       const { attributes, state } = hass.states[id];
+      const on = isOverviewSwitchOn(id, state);
       return {
         key: `${room.key}:${id}`,
         name: (attributes.friendly_name as string | undefined) ?? id,
         icon: attributes.icon as string | undefined,
         areaName: room.name,
         entities: [id],
-        onCount: state === "on" ? 1 : 0,
+        onCount: on ? 1 : 0,
         unavailable: state === "unavailable" || state === "unknown",
       };
     });
@@ -207,9 +230,9 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
     const tap = switchOverviewTap(tile.entities, entityView);
     if (tap.action === "popup") this._openPopup(tile);
     if (tap.action === "toggle") {
-      const state = this.hass?.states[tap.entityId]?.state;
-      if (state === "on" || state === "off") {
-        this.hass?.callService("homeassistant", "toggle", {}, { entity_id: tap.entityId });
+      const service = switchOverviewService(tap.entityId, this.hass?.states[tap.entityId]?.state);
+      if (service) {
+        this.hass?.callService(service.domain, service.service, {}, { entity_id: tap.entityId });
       }
     }
   }
@@ -313,7 +336,10 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
   private _renderTile(tile: SwitchTile, color: string, entityView: boolean, inPopup: boolean) {
     const cfg = this._config;
     const on = tile.onCount > 0;
-    const stateIcon = on ? SWITCH_ON_ICON : SWITCH_OFF_ICON;
+    const mediaPlayer = entityView && isOverviewMediaPlayer(tile.entities[0]);
+    const stateIcon = mediaPlayer
+      ? (on ? "mdi:speaker" : "mdi:speaker-off")
+      : (on ? SWITCH_ON_ICON : SWITCH_OFF_ICON);
     const stateLabel = this._t(on ? "lights_overview_on" : "lights_overview_off");
     const ariaLabel = `${tile.name}: ${stateLabel}`;
     const listeners = this._gestures.listeners({
@@ -372,7 +398,7 @@ windowWithCards.customCards = windowWithCards.customCards || [];
 windowWithCards.customCards.push({
   type: "m3-switches-overview-card",
   name: "M3 Switches Overview Card",
-  description: "A Material 3 overview of switches and input booleans grouped by area.",
+  description: "A Material 3 overview of switches, input booleans, and optional media players grouped by area.",
   preview: false,
   documentationURL: "https://github.com/j0sp0r/m3-cards",
 });

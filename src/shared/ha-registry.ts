@@ -883,6 +883,8 @@ export type LightGroupHandling = "all" | "prefer_groups" | "prefer_members";
 export interface DiscoverLightRoomsOptions {
   /** Defaults to `["light"]`. Add `switch` for lamps on smart plugs. */
   domains?: string[];
+  /** Allow explicitly included entities without an area to form their own rooms. */
+  includeUnassigned?: (entityId: string) => boolean;
   filter?: EntityFilterConfig;
   groupHandling?: LightGroupHandling;
   /** Defaults to `filter` — pass a narrower one when what's shown and what a
@@ -991,7 +993,7 @@ export async function discoverLightRooms(
 
   const { entryByEntityId, deviceById, areaById } = await getRegistries(hass);
 
-  const buckets = new Map<string, { shown: string[]; switchable: string[] }>();
+  const buckets = new Map<string, { areaId?: string; shown: string[]; switchable: string[] }>();
   const named = new Set(opts.filter?.include_entities ?? []);
 
   for (const id of lightIds) {
@@ -1001,7 +1003,8 @@ export async function discoverLightRooms(
     const hidden = !named.has(id) && isHiddenEntity(hass, id, entry);
     const device = entry?.device_id ? deviceById.get(entry.device_id) : undefined;
     const areaId = entry?.area_id ?? device?.area_id ?? undefined;
-    if (!areaId) continue;
+    if (!areaId && !(named.has(id) && opts.includeUnassigned?.(id))) continue;
+    const key = areaId ?? id;
 
     const labels = [...(entry?.labels ?? []), ...(device?.labels ?? [])];
     const ctx = { entityId: id, areaId, labels };
@@ -1009,22 +1012,23 @@ export async function discoverLightRooms(
     const switchable = passesGrouping(id, toggleGroupHandling) && toggleEntity(ctx);
     if (!shown && !switchable) continue;
 
-    let bucket = buckets.get(areaId);
+    let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { shown: [], switchable: [] };
-      buckets.set(areaId, bucket);
+      bucket = { areaId, shown: [], switchable: [] };
+      buckets.set(key, bucket);
     }
     if (shown) bucket.shown.push(id);
     if (switchable) bucket.switchable.push(id);
   }
 
   const rooms: DiscoveredLightRoom[] = [];
-  for (const [areaId, bucket] of buckets) {
+  for (const [key, bucket] of buckets) {
     if (bucket.shown.length === 0) continue;
-    const area = areaById.get(areaId);
+    const area = bucket.areaId ? areaById.get(bucket.areaId) : undefined;
+    const entityName = !bucket.areaId ? hass.states[key]?.attributes.friendly_name as string | undefined : undefined;
     rooms.push({
-      areaId,
-      name: area?.name ?? areaId,
+      areaId: key,
+      name: area?.name ?? entityName ?? key,
       icon: area?.icon ?? undefined,
       entities: bucket.shown.sort(),
       toggleEntities: bucket.switchable.sort(),
