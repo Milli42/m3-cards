@@ -65,11 +65,9 @@ export function syncDialogOpenState(dialog: HTMLDialogElement | null | undefined
   if (!open && dialog.open) dialog.close();
 }
 
-// `content` is the nested card element itself (a live DOM node — Lit renders
-// a Node placed in a template expression as-is), not a re-rendered template,
-// so the popup's own card keeps its identity/state across the host's renders.
+// Content can be a live nested card or a template rendered by the host.
 export function renderPopupDialog(params: {
-  content: HTMLElement | undefined;
+  content: HTMLElement | TemplateResult | undefined;
   onClose: () => void;
   onBackdropClick: (e: Event) => void;
   closeLabel: string;

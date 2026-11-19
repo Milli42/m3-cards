@@ -105,6 +105,7 @@ export const NO_DETAIL_CARDS: ReadonlySet<string> = new Set([
   // Holds other cards; each of them opens its own details.
   "m3-popup-card",
   "m3-progress-card",
+  "m3-switches-overview-card",
   "m3-time-card",
   "m3-todo-card",
 ]);

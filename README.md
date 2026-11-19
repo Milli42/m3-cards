@@ -9,7 +9,7 @@
 Material 3–inspired, native Lovelace cards for Home Assistant — built with
 TypeScript + [Lit](https://lit.dev), **without** any dependency on
 `button-card`, `card-mod`, `mod-card`, or `stack-in-card`. A single bundle
-(`m3-cards.js`) registers **58 cards**, all sharing one design language.
+(`m3-cards.js`) registers **59 cards**, all sharing one design language.
 
 <p align="center">
   <a href="https://github.com/j0sp0r/m3-cards/releases/tag/v2.9.0"><img src="docs/images/release-2.9.jpg" alt="What's new in 2.9: the energy usage card, the tariff card, the availability card and the needle gauge" width="880"></a>
@@ -60,6 +60,7 @@ card links to its full documentation further down.
 | [Button](#m3-button-card) | `m3-button-card` | Generic button/entity card for any domain |
 | [Cover](#m3-cover-card) | `m3-cover-card` | Blinds/shutters that adapt to the device's capabilities, plus a group mode |
 | [Lights Overview](#m3-lights-overview-card) | `m3-lights-overview-card` | Every light grouped by area, with separate display and toggle filters |
+| [Switches Overview](#m3-switches-overview-card) | `m3-switches-overview-card` | Switches and input booleans grouped by area, with individual controls in a room popup |
 | [Chip Buttons](#m3-chip-buttons-card) | `m3-chip-buttons-card` | A row of compact entity pills, each with its own actions |
 
 ### 🚪 Presence & safety
@@ -5371,7 +5372,9 @@ number of fans on alongside the room and light counts.
 Tap or hold the Fans tile to open its fan controls. Tap an individual fan
 to toggle it. Fans with adjustable speed get a pill slider that follows
 their reported speed steps. Dragging the slider turns an off fan on at the
-selected speed. `toggle_on_brightness` applies only to lights.
+selected speed. `fan_color` sets the active color of the Fans tile and
+individual fan tiles, and colors the speed sliders. `toggle_on_brightness`
+applies only to lights.
 
 ### What's shown vs. what a tap switches
 
@@ -5441,6 +5444,7 @@ sliders on a standalone card in `entities` view, set
 | `popup` | object (`mode`, `title`, `view`, `sort`, `show_area`, `show_header`, `show_brightness_slider`, `card`, filter fields) | – | Popup shown by the `popup` action — see above |
 | `popup.show_brightness_slider` | boolean | `true` | Show brightness sliders in the default grid popup’s entity view |
 | `on_color` / `off_color` | string | theme default | Tile color by state |
+| `fan_color` | string | `#00BCD4` | Theme color name or CSS color for active fan tiles and fan speed sliders |
 | `accent_color` / `accent_opacity` | string / number | theme default / `12` | Header icon accent |
 | `tile_tint_opacity` | number | – | Tile background tint strength |
 | `text_color` / `secondary_text_color` | string | theme default | Room names/values vs. secondary text |
@@ -5448,6 +5452,80 @@ sliders on a standalone card in `entities` view, set
 | `animation` | `auto` \| `on` \| `off` | `auto` | Respects `prefers-reduced-motion` |
 | `glass_background` | boolean | `true` | Frosted glass background |
 | `radius` / `corners` | number / object | `28` | Corner radius, optional per corner |
+
+</details>
+
+## M3 Switches Overview Card
+
+A room-by-room overview of Home Assistant switches and input booleans. Each
+room tile shows its on/off state and how many switches are on. The header
+counts rooms with an active switch and the total number of active switches.
+
+<details>
+<summary>Configuration, examples & options</summary>
+
+```yaml
+type: custom:m3-switches-overview-card
+auto_discover: true
+exclude_entities:
+  - switch.coffee_machine
+```
+
+### Room controls
+
+Tap a room with one switch to toggle it. Tap a room with multiple switches to
+open its popup. Hold any room tile to open the same popup. Tap an individual
+switch tile in the popup to toggle that switch.
+
+### Entity source and filters
+
+Auto-discovery groups `switch.*` and `input_boolean.*` by their Home Assistant
+area, using the device's area when the entity has no area of its own.
+Use `include_area`, `exclude_area`, `include_labels`, `exclude_labels`,
+`include_entities`, and `exclude_entities` to narrow the results. State
+filters (`include_state` and `exclude_state`) update as entities change state.
+
+Define `rooms` to group entities manually, including entities without an
+area. Manual rooms support the entity ID and state filters.
+
+```yaml
+type: custom:m3-switches-overview-card
+name: Utility switches
+rooms:
+  - name: Garage
+    icon: mdi:garage
+    entities:
+      - switch.workbench
+      - input_boolean.garage_notifications
+  - name: Laundry
+    entities:
+      - switch.laundry_fan
+```
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `auto_discover` | boolean | `true` | Find switches and input booleans assigned to areas |
+| `rooms` | list | — | Manual rooms with `name`, optional `icon`, and `entities` |
+| `include_area` / `exclude_area` | list | — | Filter by area ID |
+| `include_labels` / `exclude_labels` | list | — | Filter by entity or device label ID |
+| `include_entities` / `exclude_entities` | list | — | Filter by entity ID |
+| `include_state` / `exclude_state` | list | — | Filter by current state |
+| `view` | string | `rooms` | Choose `rooms` or `entities` for individual switch tiles |
+| `sort` | string | `name` | Sort by `name`, `area`, or `on_first` |
+| `name` / `icon` | string | Localized name and toggle icon | Override the header name or icon |
+| `show_header` | boolean | `true` | Show the title and summary |
+| `show_count` | boolean | `true` | Show the on/total count on room tiles |
+| `show_area` | boolean | `true` | Show the room name in the entities view |
+| `hide_empty_rooms` | boolean | `false` | Hide rooms without matching entities |
+| `shape_by_state` | boolean | `false` | Round off tiles and square on tiles |
+| `on_color` | string | `#4CAF50` | Active tile color as a theme color name or CSS color |
+| `off_color` | string | Theme default | Off tile color as a theme color name or CSS color |
+| `accent_color` | string | `on_color` | Header icon accent as a theme color name or CSS color |
+| `tile_tint_opacity` / `accent_opacity` | number | — | Tile and header icon background tint percentages |
+| `text_color` / `secondary_text_color` / `card_background` | string | Theme default | Override card text and background colors |
+| `glass_background` | boolean | `true` | Enable the glass background |
+| `radius` / `corners` | number / object | Theme default | Set the card radius or individual corners |
+| `animation` | string | `auto` | Choose `auto`, `on`, or `off` |
 
 </details>
 

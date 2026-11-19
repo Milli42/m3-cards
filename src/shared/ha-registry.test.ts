@@ -12,6 +12,7 @@ import {
   overviewFanIds,
 } from "./ha-registry";
 import type { HomeAssistant, HassEntity } from "../types";
+import { SWITCH_OVERVIEW_DOMAINS } from "./switches-overview";
 
 interface RegistryFixture {
   states: Record<string, { state: string; attributes?: Record<string, unknown> }>;
@@ -439,5 +440,33 @@ describe("discovery leaves hidden entities out", () => {
       filter: { include_entities: ["sensor.office_temperature", "sensor.trv_temperature"] },
     });
     expect(named.map((r) => r.name).sort()).toEqual(["Bedroom", "Office"]);
+  });
+});
+
+describe("switches overview discovery", () => {
+  it("groups switches and input booleans by area and applies entity exclusions", async () => {
+    const hass = hassFromSnapshots({
+      states: {
+        "switch.workbench": { state: "on" },
+        "input_boolean.notifications": { state: "off" },
+        "switch.excluded": { state: "on" },
+        "switch.unassigned": { state: "on" },
+        "light.garage": { state: "on" },
+      },
+      entities: {
+        "switch.workbench": { device_id: "workbench" },
+        "input_boolean.notifications": { area_id: "garage" },
+        "switch.excluded": { area_id: "garage" },
+        "light.garage": { area_id: "garage" },
+      },
+      devices: { workbench: { area_id: "garage" } },
+      areas: { garage: { name: "Garage" } },
+    });
+    expect(await discoverLightRooms(hass, {
+      domains: [...SWITCH_OVERVIEW_DOMAINS],
+      filter: { include_area: ["garage"], exclude_entities: ["switch.excluded"] },
+    })).toMatchObject([
+      { areaId: "garage", name: "Garage", entities: ["input_boolean.notifications", "switch.workbench"] },
+    ]);
   });
 });

@@ -14,21 +14,16 @@ import {
   CARD_VERSION,
   DEFAULT_LIGHTS_OVERVIEW_RADIUS,
   DEFAULT_LIGHTS_OVERVIEW_ICON,
-  LIGHTS_OVERVIEW_GRID_GAP,
-  LIGHTS_OVERVIEW_GRID_MIN_COL,
-  LIGHTS_OVERVIEW_ENTITY_GRID_MIN_COL,
-  LIGHTS_OVERVIEW_TILE_RADIUS,
   LIGHTS_OVERVIEW_COLOR_ON,
+  LIGHTS_OVERVIEW_FAN_COLOR,
   LIGHTS_OVERVIEW_COLOR_OFF,
   resolveCornerRadius,
-  SHAPE_OFF_TILE_RADIUS,
-  BUTTON_SHAPE_MS,
   LIGHT_THROTTLE_MS,
 } from "./const";
 import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, foregroundOn } from "./shared/color-config";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { renderCardHeader, cardHeaderStyles } from "./shared/card-header";
-import { shouldAnimate, STANDARD_EASING } from "./shared/animation";
+import { shouldAnimate } from "./shared/animation";
 import { discoverLightRooms, overviewFanIds, type DiscoveredLightRoom } from "./shared/ha-registry";
 import {
   buildStatePredicate,
@@ -57,6 +52,7 @@ import { DragThrottle } from "./shared/drag-throttle";
 import { splitLightTurnOnTargets } from "./shared/light-brightness";
 import { entityLevel, type EntityLevel } from "./shared/entity-level";
 import { capturePointer, sliderPointer, SLIDER_TOUCH_ACTION } from "./shared/slider-intent";
+import { binaryOverviewStyles } from "./shared/binary-overview-styles";
 import { stopSwipe } from "./shared/swipe";
 
 console.info(
@@ -635,7 +631,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
           .replace("{count}", String(fans.onCount))}`
       : lightsSubtitle;
 
-    const onColor = this._config.on_color ? resolveThemeColor(this._config.on_color) : LIGHTS_OVERVIEW_COLOR_ON;
+    const fanColor = this._config.fan_color ? resolveThemeColor(this._config.fan_color) : LIGHTS_OVERVIEW_FAN_COLOR;
+    const lightColor = this._config.on_color ? resolveThemeColor(this._config.on_color) : LIGHTS_OVERVIEW_COLOR_ON;
+    const onColor = this._fanPopup ? fanColor : lightColor;
     const offColor = this._config.off_color ? resolveThemeColor(this._config.off_color) : LIGHTS_OVERVIEW_COLOR_OFF;
     const accentColor = this._config.accent_color ? resolveThemeColor(this._config.accent_color) : onColor;
 
@@ -663,7 +661,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
             ? html`<div class="empty-state">${this._t(emptyKey)}</div>`
             : html`
                 <div class="room-grid ${view === "entities" ? "entity-grid" : ""}">
-                  ${fans ? this._renderTile(fans, onColor, offColor) : nothing}
+                  ${fans ? this._renderTile(fans, fanColor, offColor) : nothing}
                   ${view === "entities" && this._config.show_brightness_slider
                     ? repeat(tiles, (tile) => tile.key, (tile) => this._renderTile(tile, onColor, offColor))
                     : tiles.map((tile) => this._renderTile(tile, onColor, offColor))}
@@ -718,7 +716,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
           <span class="tile-name">${tile.name}</span>
         </div>
         <div class="tile-state">
-          <ha-icon class="bulb" icon=${stateIcon}></ha-icon>
+          <ha-icon class="state-icon" icon=${stateIcon}></ha-icon>
           <span class="state-text">${stateLabel}</span>
           ${tile.secondary
             ? html`<span class="tile-secondary" title=${tile.secondary}>${tile.secondary}</span>`
@@ -739,7 +737,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     if (!entity || !level) return body;
 
     return html`
-      <div class="tile-with-slider" style=${`--tile-color: ${color};`}>
+      <div class="tile-with-slider" style=${`--tile-color: ${level.domain === "fan" ? onColor : color};`}>
         ${body}
         ${this._renderLevelSlider(entity.entity_id, level, tile.name, tile.unavailable)}
       </div>
@@ -847,17 +845,8 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     glassCardStyles,
     cardHeaderStyles,
     popupCardStyles,
+    binaryOverviewStyles,
     css`
-      .room-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(${LIGHTS_OVERVIEW_GRID_MIN_COL}px, 1fr));
-        gap: ${LIGHTS_OVERVIEW_GRID_GAP}px;
-      }
-
-      .entity-grid {
-        grid-template-columns: repeat(auto-fit, minmax(${LIGHTS_OVERVIEW_ENTITY_GRID_MIN_COL}px, 1fr));
-      }
-
       .tile-with-slider {
         display: flex;
         flex-direction: column;
@@ -905,119 +894,6 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         background: var(--tile-color);
       }
 
-      .room-tile {
-        padding: 9px;
-        border-radius: ${LIGHTS_OVERVIEW_TILE_RADIUS}px;
-        cursor: pointer;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        box-sizing: border-box;
-        /* iOS would otherwise answer a long press with the text-selection
-           magnifier and its own share/copy callout. */
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-touch-callout: none;
-        -webkit-tap-highlight-color: transparent;
-        transition: transform 120ms ease-out;
-      }
-
-      /* Without this the hold is invisible until the popup appears, which
-         reads as an unresponsive tile. */
-      .room-tile.pressed {
-        transform: scale(0.96);
-      }
-
-      /* shape_by_state: a tile whose lights are all off rounds out. */
-      .room-tile.shaped {
-        transition:
-          transform 120ms ease-out,
-          border-radius ${unsafeCSS(BUTTON_SHAPE_MS)}ms ${unsafeCSS(STANDARD_EASING)};
-      }
-      .room-tile.shaped:not(.is-on) {
-        border-radius: ${SHAPE_OFF_TILE_RADIUS}px;
-      }
-
-      .no-animations .room-tile {
-        transition: none;
-      }
-
-      .room-tile:focus-visible {
-        outline: 2px solid var(--tile-color);
-        outline-offset: 2px;
-      }
-
-      .room-tile.unavailable {
-        opacity: 0.4;
-        cursor: default;
-      }
-
-      /* Nothing left to switch after the toggle filter — still readable,
-         but it must not look like a button. */
-      .room-tile.not-switchable {
-        cursor: default;
-      }
-
-      .tile-header {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        min-width: 0;
-      }
-
-      .tile-header ha-icon {
-        --mdc-icon-size: 13px;
-        color: var(--tile-color);
-        flex-shrink: 0;
-      }
-
-      .tile-name {
-        font-size: 10px;
-        opacity: 0.7;
-        color: var(--m3p-text);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
-      }
-
-      .tile-state {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      .tile-state .bulb {
-        --mdc-icon-size: 18px;
-        flex-shrink: 0;
-        color: var(--tile-color);
-      }
-
-      .state-text {
-        font-size: 17px;
-        font-weight: 500;
-        color: var(--m3p-text);
-        line-height: 1.1;
-      }
-
-      .tile-secondary {
-        min-width: 0;
-        margin-inline-start: auto;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 10px;
-        opacity: 0.55;
-        color: var(--m3p-secondary-text);
-      }
-
-      .empty-state {
-        text-align: center;
-        font-size: 13px;
-        opacity: 0.6;
-        padding: 16px 0;
-        color: var(--m3p-secondary-text);
-      }
     `,
   ];
 }
