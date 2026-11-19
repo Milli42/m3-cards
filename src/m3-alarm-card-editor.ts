@@ -20,6 +20,7 @@ type ColorField = "accent_color" | "text_color" | "secondary_text_color" | "card
 const DEFAULTS: Partial<Record<keyof M3AlarmCardConfig, unknown>> = {
   show_sensors: true,
   compact: false,
+  collapse_disarmed: true,
   animation: "auto",
 };
 
@@ -79,6 +80,7 @@ export class M3AlarmCardEditor extends LitElement implements LovelaceCardEditor 
       sensors: "editor_alarm_sensors",
       show_sensors: "editor_alarm_show_sensors",
       compact: "editor_alarm_compact",
+      collapse_disarmed: "editor_alarm_collapse_disarmed",
       animation: "editor_progress_animation",
       glass_background: "editor_glass_background",
       ...radiusLabelMap,
@@ -173,10 +175,16 @@ export class M3AlarmCardEditor extends LitElement implements LovelaceCardEditor 
           <div class="panel-content">
             <ha-form
               .hass=${this.hass}
-              .data=${{ entity: cfg.entity ?? "", name: cfg.name ?? "", compact: cfg.compact ?? false }}
+              .data=${{
+                entity: cfg.entity ?? "",
+                name: cfg.name ?? "",
+                compact: cfg.compact ?? false,
+                collapse_disarmed: cfg.collapse_disarmed ?? true,
+              }}
               .schema=${[
                 { name: "entity", selector: { entity: { domain: "alarm_control_panel" } } },
                 { name: "name", selector: { text: {} } },
+                { name: "collapse_disarmed", selector: { boolean: {} } },
                 { name: "compact", selector: { boolean: {} } },
               ]}
               .computeLabel=${this._computeLabel}

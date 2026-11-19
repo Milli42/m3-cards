@@ -1,3 +1,4 @@
+import { OPENING_COVER_CLASSES, OPENING_DEVICE_CLASSES, openingKind, preferOpeningCovers } from "./openings";
 import type { HomeAssistant } from "../types";
 import { buildEntityFilterPredicate, type EntityFilterConfig } from "./entity-filter";
 
@@ -148,12 +149,17 @@ async function discoverByDeviceClass(
     })
     .map((s) => s.entity_id);
 
+  if (!opts.includeAreas?.length && !opts.includeLabels?.length) return candidates;
+  return narrowDiscovery(candidates, opts, await getRegistries(hass));
+}
+
+function narrowDiscovery(
+  candidates: string[],
+  opts: DiscoverPowerOptions,
+  { entryByEntityId, deviceById }: RegistrySnapshot,
+): string[] {
   const needsArea = !!opts.includeAreas?.length;
   const needsLabel = !!opts.includeLabels?.length;
-  if (!needsArea && !needsLabel) return candidates;
-
-  const { entryByEntityId, deviceById } = await getRegistries(hass);
-
   const includeAreas = new Set(opts.includeAreas ?? []);
   const includeLabels = new Set(opts.includeLabels ?? []);
 
@@ -188,13 +194,46 @@ export async function discoverBatteryEntities(
   return discoverByDeviceClass(hass, ["sensor", "binary_sensor"], ["battery"], opts);
 }
 
-// Windows and doors for the openings card: binary sensors of the four
-// opening classes.
+export interface DiscoverOpeningOptions extends DiscoverPowerOptions {
+  includeCovers?: boolean;
+  includeLocks?: boolean;
+}
+
 export async function discoverOpeningEntities(
   hass: HomeAssistant,
-  opts: DiscoverPowerOptions,
+  opts: DiscoverOpeningOptions,
 ): Promise<string[]> {
-  return discoverByDeviceClass(hass, ["binary_sensor"], ["door", "window", "opening", "garage_door"], opts);
+  const exclude = new Set(opts.excludeEntities ?? []);
+  const candidates = Object.values(hass.states).filter(({ entity_id: id, attributes }) => {
+    if (exclude.has(id) || isHiddenEntity(hass, id)) return false;
+    const kind = openingKind(id);
+    if (kind === "lock") return opts.includeLocks !== false;
+    if (kind === "cover") {
+      return opts.includeCovers !== false && OPENING_COVER_CLASSES.some((c) => c === attributes.device_class);
+    }
+    return id.startsWith("binary_sensor.") && OPENING_DEVICE_CLASSES.some((c) => c === attributes.device_class);
+  }).map((entity) => entity.entity_id);
+
+  if (!opts.includeAreas?.length && !opts.includeLabels?.length) {
+    return deduplicateOpeningEntities(hass, candidates, true);
+  }
+  const registries = await getRegistries(hass);
+  const visible = candidates.filter((id) => !isHiddenEntity(hass, id, registries.entryByEntityId.get(id)));
+  const ids = narrowDiscovery(visible, opts, registries);
+  return preferOpeningCovers(ids, (id) => registries.entryByEntityId.get(id)?.device_id);
+}
+
+export async function deduplicateOpeningEntities(
+  hass: HomeAssistant,
+  ids: string[],
+  discovered = false,
+): Promise<string[]> {
+  if (!ids.some((id) => id.startsWith("cover.")) || !ids.some((id) => id.startsWith("binary_sensor."))) return ids;
+  if (hass.entities) return preferOpeningCovers(ids, (id) => (hass.entities?.[id] as EntityRegistryEntry | undefined)?.device_id);
+  const entries = await hass.callWS<EntityRegistryEntry[]>({ type: "config/entity_registry/list" });
+  const entryById = new Map(entries.map((entry) => [entry.entity_id, entry]));
+  const visible = discovered ? ids.filter((id) => !isHiddenEntity(hass, id, entryById.get(id))) : ids;
+  return preferOpeningCovers(visible, (id) => entryById.get(id)?.device_id);
 }
 
 // Auto-discovers every `person.*` entity — unlike the device_class-based

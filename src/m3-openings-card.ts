@@ -51,15 +51,17 @@ import { openEntityDetail } from "./shared/entity-detail";
 import { easeFoldHeight } from "./shared/fold-arrow";
 import { playKeyed, snapshotKeyed, type MotionSnapshot } from "./shared/keyed-motion";
 import { formatClock } from "./shared/formatting";
-import { discoverOpeningEntities } from "./shared/ha-registry";
+import { deduplicateOpeningEntities, discoverOpeningEntities } from "./shared/ha-registry";
 import { TemplatedCard } from "./shared/templated-card";
 import { VisibleTicker } from "./shared/visible-ticker";
 import { fetchRealChanges, formatHeldFor, type RealChange } from "./shared/state-since";
 import {
+  hasOutdoorWarning,
   latestClosed,
   normalizeEntries,
   numericState,
   openingIcon,
+  openingKind,
   openingStatus,
   openingWarning,
   resolveEntries,
@@ -105,6 +107,9 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
   @state() private _discovered?: string[];
   @state() private _now = Date.now();
   @state() private _chipsOpen = false;
+  @state() private _controlsOpen = false;
+  private readonly _pendingActions = new Map<string, { lastChanged: string; timer?: ReturnType<typeof setTimeout> }>();
+  private _registry?: HomeAssistant["entities"];
   /** From the recorder, per entity, for the readings in `_historyKey`. */
   @state() private _history = new Map<string, RealChange>();
   private _historyKey = "";
@@ -136,6 +141,8 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       ...config,
     };
     this._discoverKey = "";
+    this._discovered = undefined;
+    this._controlsOpen = false;
   }
 
   public getCardSize(): number {
@@ -154,6 +161,8 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     this._ticker.disconnect();
+    for (const action of this._pendingActions.values()) clearTimeout(action.timer);
+    this._pendingActions.clear();
   }
 
   private get _language(): string {
@@ -169,31 +178,33 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
   private get _entries(): OpeningEntryConfig[] {
     const cfg = this._config;
     if (!cfg) return [];
-    return resolveEntries(normalizeEntries(cfg.entities), cfg.auto_discover ? (this._discovered ?? []) : undefined);
+    return resolveEntries(normalizeEntries(cfg.entities), this._discovered ?? (cfg.auto_discover ? [] : undefined));
   }
 
   private _maybeDiscover(): void {
     const cfg = this._config;
-    if (!this.hass || !cfg?.auto_discover) return;
-    // The entity count is in the key so a newly added sensor is found; the
-    // filters so a changed config searches again.
-    const key = JSON.stringify([
-      cfg.include_area ?? [],
-      cfg.include_label ?? [],
-      cfg.exclude_entities ?? [],
-      Object.keys(this.hass.states).length,
-    ]);
-    if (key === this._discoverKey) return;
+    const hass = this.hass;
+    if (!hass || !cfg) return;
+    const manualIds = normalizeEntries(cfg.entities).map((entry) => entry.entity);
+    const key = JSON.stringify(cfg.auto_discover ? Object.keys(hass.states).length : manualIds);
+    if (key === this._discoverKey && this._registry === hass.entities) return;
     this._discoverKey = key;
-    discoverOpeningEntities(this.hass, {
-      includeAreas: cfg.include_area,
-      includeLabels: cfg.include_label,
-      excludeEntities: cfg.exclude_entities,
-    })
+    this._registry = hass.entities;
+
+    const request = cfg.auto_discover
+      ? discoverOpeningEntities(hass, {
+          includeAreas: cfg.include_area,
+          includeLabels: cfg.include_label,
+          excludeEntities: cfg.exclude_entities,
+          includeCovers: cfg.include_covers,
+          includeLocks: cfg.include_locks,
+        })
+      : deduplicateOpeningEntities(hass, manualIds);
+    request
       .then((ids) => {
-        if (key === this._discoverKey) this._discovered = ids;
+        if (cfg === this._config && key === this._discoverKey && hass.entities === this._registry) this._discovered = ids;
       })
-      .catch((e) => console.error("m3-openings-card: auto-discovery failed", e));
+      .catch((e) => console.error("m3-openings-card: discovery failed", e));
   }
 
   private _watched(): (string | undefined)[] {
@@ -202,6 +213,8 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
 
   protected shouldUpdate(changed: PropertyValues): boolean {
     if (changed.size > 1 || !changed.has("hass")) return true;
+    const previous = changed.get("hass") as HomeAssistant | undefined;
+    if (previous?.entities !== this.hass?.entities) return true;
     return this._config?.auto_discover
       ? discoveryChangeMatters(changed, this.hass, this._watched())
       : hassChangeMatters(changed, this.hass, this._watched());
@@ -230,6 +243,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
         this._historyKey = key;
       })
       .catch(() => {
+        if (this._historyFetching !== key) return;
         this._historyKey = key;
         this._history = new Map();
       })
@@ -265,7 +279,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
   private _summary(rows: OpeningRow[]): Summary {
     if (rows.length === 0) return "empty";
     if (rows.some((r) => r.status === "open")) return "open";
-    if (rows.some((r) => r.status === "missing")) return "incomplete";
+    if (rows.some((r) => r.status === "missing" || r.status === "jammed")) return "incomplete";
     return "clear";
   }
 
@@ -277,7 +291,8 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
     // A window that opens or closes changes the layout: a row comes or goes,
     // a chip with it, the count, the height. Measured before, played after.
     const rows = this._rows();
-    const key = [this._chipsOpen, ...rows.map((r) => `${r.entry.entity}:${r.status}`)].join("|");
+    if (this._summary(rows) !== "clear") this._controlsOpen = false;
+    const key = [this._chipsOpen, this._controlsOpen, ...rows.map((r) => `${r.entry.entity}:${r.status}`)].join("|");
     if (this._layoutKey !== undefined && key !== this._layoutKey && shouldAnimate(this._config?.animation)) {
       const inner = this.renderRoot?.querySelector?.(".card-inner") as HTMLElement | null;
       this._easeFrom = inner?.offsetHeight ?? 0;
@@ -319,6 +334,55 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
     this._chipsOpen = !this._chipsOpen;
   }
 
+  private _deviceAction(row: OpeningRow, secure: boolean) {
+    const kind = openingKind(row.entry.entity);
+    if (kind === "sensor" || !row.entity) return undefined;
+
+    const state = row.entity.state;
+    const id = row.entry.entity;
+    const lastChanged = row.entity.last_changed;
+    const moving = state === "closing" || state === "locking" || state === "opening" || state === "unlocking";
+    const busy = moving || this._pendingActions.get(id)?.lastChanged === lastChanged;
+    const service = kind === "cover" ? (secure ? "open_cover" : "close_cover") : (secure ? "unlock" : "lock");
+    const label = this._t(`openings_action_${service}`);
+    return html`<button
+      type="button"
+      class="device-action"
+      aria-label=${`${label}: ${row.name}`}
+      aria-busy=${String(busy)}
+      ?disabled=${busy}
+      @click=${(e: Event) => {
+        e.stopPropagation();
+        void this._callDeviceAction(id, kind, service, lastChanged);
+      }}
+    >${busy ? this._t("openings_busy") : label}</button>`;
+  }
+
+  private async _callDeviceAction(id: string, domain: "cover" | "lock", service: string, lastChanged: string): Promise<void> {
+    const previous = this._pendingActions.get(id);
+    if (!this.hass || previous?.lastChanged === lastChanged) return;
+    clearTimeout(previous?.timer);
+    const pending: { lastChanged: string; timer?: ReturnType<typeof setTimeout> } = { lastChanged };
+    this._pendingActions.set(id, pending);
+    this.requestUpdate();
+    const clear = () => {
+      if (this._pendingActions.get(id) !== pending) return;
+      this._pendingActions.delete(id);
+      this.requestUpdate();
+    };
+    try {
+      await this.hass.callService(domain, service, { entity_id: id });
+      if (this._pendingActions.get(id) === pending) pending.timer = setTimeout(clear, 1500);
+    } catch (e) {
+      clear();
+      console.error("m3-openings-card: device action failed", e);
+    }
+  }
+
+  private _rowIcon(row: OpeningRow, open: boolean): string {
+    return row.entry.icon ?? openingIcon(row.entity?.attributes.device_class, open, openingKind(row.entry.entity));
+  }
+
   // ---- render ---------------------------------------------------------------
 
   protected render() {
@@ -332,7 +396,9 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       this._language,
     );
     const closed = rows.filter((r) => r.status === "closed");
-    const missing = rows.filter((r) => r.status === "missing");
+    const missing = rows.filter((r) => r.status === "missing" || r.status === "jammed");
+    const devices = closed.filter((r) => openingKind(r.entry.entity) !== "sensor");
+    const canExpand = summary === "clear" && devices.length > 0 && cfg.show_open_controls !== false;
 
     const colorOpen = resolveThemeColor(cfg.color_open ?? OPENINGS_COLOR_OPEN);
     const colorWarn = resolveThemeColor(cfg.color_warn ?? OPENINGS_COLOR_WARN);
@@ -382,9 +448,14 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
             icon: this._headerIcon(summary, open[0]),
             name: title,
             subtitle: this._subtitle(summary, rows, closed, missing),
-            right: this._headerRight(summary, open.length),
+            onClick: canExpand ? () => (this._controlsOpen = !this._controlsOpen) : undefined,
+            label: canExpand ? `${title}, ${this._t("openings_all_secure")}` : undefined,
+            expanded: canExpand ? this._controlsOpen : undefined,
+            right: this._headerRight(summary, open.length, devices.length > 0, canExpand),
           })}
-          ${this._renderOpen(open, colorOpen)} ${summary === "clear" ? nothing : this._renderChips(missing, closed)}
+          ${this._renderOpen(open, colorOpen)}
+          ${canExpand && this._controlsOpen ? this._renderSecureControls(devices, colorClosed) : nothing}
+          ${summary === "clear" ? nothing : this._renderChips(missing, closed)}
         </div>
       </ha-card>
     `;
@@ -393,7 +464,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
   private _headerIcon(summary: Summary, firstOpen: OpeningRow | undefined): string {
     if (this._config?.icon) return this._config.icon;
     if (summary === "clear") return "mdi:lock";
-    if (summary === "open") return openingIcon(firstOpen?.entity?.attributes?.device_class as string | undefined, true);
+    if (firstOpen) return this._rowIcon(firstOpen, true);
     return "mdi:alert-circle-outline";
   }
 
@@ -403,39 +474,53 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       const last = latestClosed(closed);
       if (!last?.since) return this._t("openings_all_closed_sub").replace("{n}", String(closed.length));
       const time = formatClock(new Date(last.since).toISOString(), this._language, this._now) ?? "";
-      return this._t("openings_last_opened").replace("{name}", last.name).replace("{time}", time);
+      return this._t(openingKind(last.entry.entity) === "lock" ? "openings_last_unlocked" : "openings_last_opened").replace("{name}", last.name).replace("{time}", time);
     }
     const base = this._t("openings_closed_of")
       .replace("{closed}", String(closed.length))
       .replace("{total}", String(rows.length));
-    return missing.length ? `${base} · ${this._t("openings_missing_n").replace("{n}", String(missing.length))}` : base;
+    const unavailable = missing.filter((r) => r.status === "missing").length;
+    const jammed = missing.length - unavailable;
+    return [
+      base,
+      unavailable ? this._t("openings_missing_n").replace("{n}", String(unavailable)) : "",
+      jammed ? this._t("openings_jammed_n").replace("{n}", String(jammed)) : "",
+    ].filter(Boolean).join(" · ");
   }
 
-  private _headerRight(summary: Summary, openCount: number) {
+  private _headerRight(summary: Summary, openCount: number, secure: boolean, canExpand: boolean) {
     if (summary === "open") {
       return html`<div class="hero" data-motion-key="hero" aria-label=${`${openCount} ${this._t("openings_open_label")}`}>
         <span class="hero-n" data-motion-key="hero-n" data-motion-count>${openCount}</span><span class="hero-l">${this._t("openings_open_label")}</span>
       </div>`;
     }
     if (summary === "clear") {
-      return html`<span class="pill ok" data-motion-key="pill-ok"><ha-icon icon="mdi:check"></ha-icon>${this._t("openings_all_closed")}</span>`;
+      return html`<span class="pill ok" data-motion-key="pill-ok">
+        <ha-icon icon="mdi:check"></ha-icon>${this._t(secure ? "openings_all_secure" : "openings_all_closed")}
+        ${canExpand ? html`<ha-icon icon=${this._controlsOpen ? "mdi:chevron-up" : "mdi:chevron-down"} aria-hidden="true"></ha-icon>` : nothing}
+      </span>`;
     }
     return undefined;
   }
 
   /** How long, as the row says it; and the minutes the warning compares. */
   private _openFor(row: OpeningRow): { text: string; minutes: number } {
+    const state = row.entity?.state;
+    if (state === "opening" || state === "closing" || state === "unlocking") {
+      return { text: this._t(`openings_state_${state}`), minutes: 0 };
+    }
+    const lock = openingKind(row.entry.entity) === "lock";
     if (row.older) {
       return {
-        text: this._t("openings_open_older").replace("{d}", String(OPENINGS_HISTORY_DAYS)),
+        text: this._t(lock ? "openings_unlocked_older" : "openings_open_older").replace("{d}", String(OPENINGS_HISTORY_DAYS)),
         minutes: Number.POSITIVE_INFINITY,
       };
     }
-    if (row.since === undefined) return { text: this._t("openings_open_unknown"), minutes: 0 };
+    if (row.since === undefined) return { text: this._t(lock ? "openings_unlocked_unknown" : "openings_open_unknown"), minutes: 0 };
     const ms = this._now - row.since;
-    if (ms < 60_000) return { text: this._t("openings_open_just_now"), minutes: 0 };
+    if (ms < 60_000) return { text: this._t(lock ? "openings_unlocked_just_now" : "openings_open_just_now"), minutes: 0 };
     return {
-      text: this._t("openings_open_since").replace("{duration}", formatHeldFor(row.since, this._now, this._language)),
+      text: this._t(lock ? "openings_unlocked_since" : "openings_open_since").replace("{duration}", formatHeldFor(row.since, this._now, this._language)),
       minutes: ms / 60_000,
     };
   }
@@ -460,37 +545,65 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       <div class="row-list open-group" role="list">
         ${open.map((row) => {
           const { text, minutes } = this._openFor(row);
-          const warn = openingWarning({
-            openMinutes: minutes,
-            warnAfterMinutes: cfg.warn_after_minutes ?? DEFAULT_OPENINGS_WARN_AFTER_MIN,
-            outdoor: outdoor.value,
-            hasOutdoorSensor: outdoor.configured,
-            coldBelow: cfg.cold_below ?? DEFAULT_OPENINGS_COLD_BELOW,
-          });
-          const deviceClass = row.entity?.attributes?.device_class as string | undefined;
-          const pillLabel = outdoor.label ? this._t("openings_outdoor").replace("{t}", outdoor.label) : "";
+          const sensor = openingKind(row.entry.entity) === "sensor";
+          const coldWarning = hasOutdoorWarning(row.entry.entity, row.entity?.attributes.device_class);
+          const warn = sensor || coldWarning
+            ? openingWarning({
+                openMinutes: minutes,
+                warnAfterMinutes: cfg.warn_after_minutes ?? DEFAULT_OPENINGS_WARN_AFTER_MIN,
+                outdoor: coldWarning ? outdoor.value : undefined,
+                hasOutdoorSensor: coldWarning && outdoor.configured,
+                coldBelow: cfg.cold_below ?? DEFAULT_OPENINGS_COLD_BELOW,
+              })
+            : { highlight: false, pill: false };
+          const pillLabel = warn.pill && outdoor.label ? this._t("openings_outdoor").replace("{t}", outdoor.label) : "";
+          const action = this._deviceAction(row, false);
           return renderListRow({
             host: this,
             key: row.entry.entity,
-            icon: row.entry.icon ?? openingIcon(deviceClass, true),
+            icon: this._rowIcon(row, true),
             iconColor: colorOpen,
             iconBackground: tintOn(this, colorOpen, undefined, OPENINGS_ICON_TINT),
             rowBackground: "var(--op-row-bg)",
-            label: [row.name, text, warn.pill ? pillLabel : ""].filter(Boolean).join(", "),
+            label: [row.name, text, pillLabel].filter(Boolean).join(", "),
             extraClass: warn.highlight ? "warn" : "",
             onClick: () => this._tap(row.entry),
             middle: html`
               <div class="op-name">${row.name}</div>
               <div class="op-sub ${warn.highlight ? "warn" : ""}">${text}</div>
             `,
-            right:
-              warn.pill && outdoor.label
+            rightInteractive: !!action,
+            right: action || pillLabel ? html`<div class="row-end">
+              ${pillLabel
                 ? html`<span class="pill warn"><ha-icon icon="mdi:thermometer"></ha-icon>${outdoor.label}</span>`
-                : undefined,
+                : nothing}
+              ${action}
+            </div>` : undefined,
           });
         })}
       </div>
     `;
+  }
+
+  private _renderSecureControls(rows: OpeningRow[], color: string) {
+    return html`<div class="row-list open-group">
+      ${rows.map((row) => {
+        const state = row.entity?.state;
+        const text = this._t(state === "locking" ? "openings_state_locking" : state === "locked" ? "openings_state_locked" : "openings_state_closed");
+        return renderListRow({
+          host: this,
+          key: row.entry.entity,
+          icon: this._rowIcon(row, false),
+          iconColor: color,
+          iconBackground: tintOn(this, color, undefined, OPENINGS_ICON_TINT),
+          label: `${row.name}, ${text}`,
+          onClick: () => this._tap(row.entry),
+          middle: html`<div class="op-name">${row.name}</div><div class="op-sub">${text}</div>`,
+          rightInteractive: true,
+          right: this._deviceAction(row, true),
+        });
+      })}
+    </div>`;
   }
 
   /** Missing sensors first — they want attention — then the closed ones; "+N" beyond the limit. */
@@ -507,14 +620,16 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
     return html`
       <div class="chips" role="list">
         ${shown.map((row) => {
-          const isMissing = row.status === "missing";
-          const label = this._t(isMissing ? "openings_chip_missing" : "openings_chip_closed").replace("{name}", row.name);
+          const attention = row.status !== "closed";
+          const jammed = row.status === "jammed";
+          const lock = openingKind(row.entry.entity) === "lock";
+          const label = this._t(jammed ? "openings_chip_jammed" : attention ? "openings_chip_missing" : lock ? "openings_chip_locked" : "openings_chip_closed").replace("{name}", row.name);
           const tap = (e: Event) => {
             e.stopPropagation();
             this._tap(row.entry);
           };
           return html`<span
-            class="chip ${isMissing ? "missing" : "ok"}"
+            class="chip ${attention ? "missing" : "ok"}"
             data-motion-key=${`chip:${row.entry.entity}`}
             role="button"
             tabindex="0"
@@ -522,7 +637,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
             @click=${tap}
             @keydown=${activateOnKey(tap)}
           >
-            <ha-icon icon=${isMissing ? "mdi:alert-circle-outline" : "mdi:check"}></ha-icon>${row.name}
+            <ha-icon icon=${attention ? "mdi:alert-circle-outline" : lock ? "mdi:lock" : "mdi:check"}></ha-icon>${row.name}${jammed ? ` · ${this._t("openings_state_jammed")}` : ""}
           </span>`;
         })}
         ${overflow
@@ -563,6 +678,40 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
         transition:
           background 400ms ease,
           color 400ms ease;
+      }
+
+      .m3-header:not([role="button"]) {
+        cursor: default;
+      }
+
+      .row-end {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .device-action {
+        min-height: 36px;
+        min-width: 44px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 18px;
+        background: var(--op-pill-ok-bg);
+        color: var(--op-pill-ok-ink);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .device-action:disabled {
+        opacity: 0.65;
+        cursor: default;
+      }
+
+      .device-action:focus-visible {
+        outline: 2px solid var(--op-pill-ok-ink);
+        outline-offset: 2px;
       }
 
       /* ---- header right ---- */

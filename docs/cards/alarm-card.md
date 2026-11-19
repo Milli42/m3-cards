@@ -50,11 +50,11 @@ modes:
 
 | State | Header | Below |
 | --- | --- | --- |
-| Disarmed | Neutral, "Disarmed · since 18:29" | The mode buttons; open sensors as chips, plus "3 sensors ok" |
+| Disarmed | Neutral, "Disarmed · since 18:29" | Tap the header to show the mode buttons and sensor chips |
 | Arming | Warning colour, pulsing, "To: Away" | A countdown pill and bar when the delay is known; the target mode in the warning colour |
-| Armed | Accent, "Armed · Home", a "Secured" pill | The mode buttons, the active one a full pill — switch between armed modes directly |
+| Armed | Accent, "Armed · Home", a "Secured" pill | The mode buttons, the active one a full pill — switch between armed modes directly, or enter a disarm code when required |
 | Entry delay | Warning colour, countdown | The code entry opens by itself |
-| Triggered | The whole card in the error colour, who or what triggered it and when | One wide "Disarm" button that opens the code entry |
+| Triggered | The whole card in the error colour, who or what triggered it and when | Disarm keypad when a code is required, or a wide Disarm button |
 | Unavailable | Neutral | The buttons, disabled |
 
 ### Codes
@@ -76,8 +76,10 @@ warning colour (a tap opens them), the closed ones are counted.
 
 ### Compact
 
-`compact: true` is one row: the header and its pill. A tap on it opens the
-buttons; an entry delay or a triggered alarm opens them by itself.
+The disarmed card shows a single header row by default. Tap the header to
+show or hide the arm controls and sensor chips. Set `collapse_disarmed: false`
+to keep those controls visible. The armed, arming, pending and triggered
+states show their controls automatically.
 
 ### Configuration options
 
@@ -88,7 +90,8 @@ buttons; an entry delay or a triggered alarm opens them by itself.
 | `modes` | list | supported modes, max. 4 | The buttons, in order. Each a mode (`disarmed`, `armed_home`, `armed_away`, `armed_night`, `armed_vacation`, `armed_custom_bypass`) or `{ mode, name, icon }` |
 | `sensors` | list | – | `binary_sensor`s for the status line, when the integration does not list open sensors itself |
 | `show_sensors` | boolean | `true` | The open / ok sensor chips |
-| `compact` | boolean | `false` | One row; a tap opens the buttons |
+| `collapse_disarmed` | boolean | `true` | Fold the disarmed controls into the header |
+| `compact` | boolean | `false` | Also fold the controls while disarming or unavailable |
 | `accent_color` | string | `primary` | The armed colour |
 | `text_color` / `secondary_text_color` / `card_background` | string | theme | As on every card |
 | `glass_background` | boolean | `true` | Frosted glass background |

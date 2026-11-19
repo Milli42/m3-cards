@@ -6,6 +6,17 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.12.0] – 2026-11-19
+
+### Changed
+
+### Changed
+
+- **Alarm** and **Leak** use compact headers. The Alarm card folds its controls
+  while disarmed by default.
+- **Openings** adds door, gate and garage covers and locks, with direct controls
+  and cover preference when a sensor shares the same device.
+
 ## [2.11.0] – 2026-11-19
 
 ### Changed

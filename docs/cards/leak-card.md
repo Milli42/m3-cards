@@ -26,11 +26,11 @@ valve_entity: valve.main_water        # optional: valve / switch / cover
 ```
 
 By default, `show_only_wet` shows every wet sensor during an alarm. When no
-sensor is wet, the card shows the banner and its chips only. The banner still
-reflects the full sensor set.
+sensor is wet, the card shows a compact header with any valve and test chips.
+The header reflects the full sensor set.
 
 Set `show_only_wet: false` to list dry and offline sensors as well.
-`collapse_ok` folds that list while all sensors are OK. `max_visible` puts
+`collapse_ok` folds that list behind a header chevron while all sensors are OK. `max_visible` puts
 extra rows behind a "show N more" toggle and shows the full list during an alarm.
 
 ### Configuration options
@@ -49,7 +49,7 @@ extra rows behind a "show N more" toggle and shows the full list during an alarm
 | `test_interval_days` | number | `0` | Show a "test due" chip after N days (with `last_test_entity`) |
 | `show_only_wet` | boolean | `true` | Show only wet sensor rows and hide the list when none are wet |
 | `max_visible` | number | – | Show only this many sensors, the rest behind a toggle |
-| `collapse_ok` | boolean | `false` | Collapse the list while all dry |
+| `collapse_ok` | boolean | `false` | Fold the list into the header while all dry |
 | `notify_service` / `notify_enabled` | – | – | Optional push on water detection (off by default) |
 
 > The card is the **overview**, not the alarm. Pair it with an automation that

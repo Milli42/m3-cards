@@ -3391,11 +3391,11 @@ valve_entity: valve.main_water        # optional: valve / switch / cover
 ```
 
 By default, `show_only_wet` shows every wet sensor during an alarm. When no
-sensor is wet, the card shows the banner and its chips only. The banner still
-reflects the full sensor set.
+sensor is wet, the card shows a compact header with any valve and test chips.
+The header reflects the full sensor set.
 
 Set `show_only_wet: false` to list dry and offline sensors as well.
-`collapse_ok` folds that list while all sensors are OK. `max_visible` puts
+`collapse_ok` folds that list behind a header chevron while all sensors are OK. `max_visible` puts
 extra rows behind a "show N more" toggle and shows the full list during an alarm.
 
 ### Configuration options
@@ -3414,7 +3414,7 @@ extra rows behind a "show N more" toggle and shows the full list during an alarm
 | `test_interval_days` | number | `0` | Show a "test due" chip after N days (with `last_test_entity`) |
 | `show_only_wet` | boolean | `true` | Show only wet sensor rows and hide the list when none are wet |
 | `max_visible` | number | – | Show only this many sensors, the rest behind a toggle |
-| `collapse_ok` | boolean | `false` | Collapse the list while all dry |
+| `collapse_ok` | boolean | `false` | Fold the list into the header while all dry |
 | `notify_service` / `notify_enabled` | – | – | Optional push on water detection (off by default) |
 
 > The card is the **overview**, not the alarm. Pair it with an automation that
@@ -7591,13 +7591,9 @@ tap does. The swipe style ignores `confirm`: its slide is the confirmation.
 
 ## M3 Openings Card
 
-Windows and doors on one card that changes with them. While something is
-open it leads with it: the count beside the header, the open sensors as one
-joined group with how long each has been open — longest first — and a red
-pill with the outdoor temperature when one has been open too long on a cold
-day. Everything closed shrinks it to a single line that names the last one
-opened. A sensor that does not answer is shown as such and never counted as
-closed.
+Track windows, doors, gates, garages and locks in one card. Open and unlocked
+items show how long they have held that state. When everything is closed and
+locked, the card folds to one line.
 
 <img src="docs/images/openings-card.png" alt="Openings Card" width="440">
 
@@ -7611,10 +7607,12 @@ type: custom:m3-openings-card
 outdoor_temperature: sensor.outdoor_temperature
 ```
 
-Without `entities` the card finds every `binary_sensor` of class `door`,
-`window`, `opening` or `garage_door` on its own, as the battery card finds
-batteries. `include_area`, `include_label` and `exclude_entities` narrow it
-down; entries under `entities` then only rename or re-icon single sensors.
+Without `entities` the card finds binary sensors of class `door`, `window`,
+`opening` or `garage_door`, covers of class `garage`, `gate` or `door`, and
+all locks. `include_area`, `include_label` and `exclude_entities` narrow
+discovery. In discovery mode, entries under `entities` customize the matching
+entities. When a listed cover shares a device with a listed binary sensor, the
+cover represents that device.
 
 ### Or name them
 
@@ -7623,6 +7621,8 @@ type: custom:m3-openings-card
 title: Windows and doors
 entities:
   - binary_sensor.bathroom_window          # the bare id works
+  - cover.garage_door
+  - lock.front_door
   - entity: binary_sensor.balcony_door
     name: Balcony door
     icon: mdi:door-sliding
@@ -7639,30 +7639,34 @@ A list turns discovery off; `auto_discover: true` turns it back on.
 
 ### What it shows
 
-- **Something open:** the header icon in amber, "6 of 8 closed" and the
-  count. Each open sensor is a row with a window or door icon (by device
-  class) and "open for 48 min" — "2 h 5 min", "1 day 3 h", "2 days" as it
-  grows. The start comes from the recorder, so a Home Assistant restart does
-  not reset it to "2 min".
-- **The warning:** open for `warn_after_minutes` *and* colder outside than
-  `cold_below` — the duration turns amber and a red pill shows the outdoor
-  temperature. Without `outdoor_temperature` there is no pill, and the
-  duration is highlighted on time alone.
-- **Closed sensors** are green chips with a check, at most `max_chips`; a
-  "+N" chip opens the rest. Unreachable ones come first, neutral with a
-  warning icon, and the subtitle counts them.
-- **All closed:** one line — a green lock, "Last opened: Kitchen, until
-  14:12", and an "All closed" pill.
-- A tap on a row or chip opens its details, or runs `tap_action` — the
-  entry's own, else the card's.
+- **Open or unlocked:** the header counts closed covers, closed sensors and
+  locked locks together. Rows show how long each item has been open or
+  unlocked, using recorder history when available. Covers show Opening or
+  Closing while moving. Use **Close** or **Lock** to act directly from the row.
+- **Cold warning:** a door or window binary sensor, or a door, gate or garage
+  cover, shows an outdoor-temperature pill after `warn_after_minutes` when
+  the reading is below `cold_below`. Without a usable outdoor reading,
+  eligible rows highlight the duration on time alone.
+- **Closed or locked:** green chips show closed sensors and covers with a check
+  and locked locks with a lock icon. Unreachable and jammed items appear first
+  with a warning icon and are excluded from the closed count.
+- **All closed or secure:** the card shows one line with an **All closed** pill,
+  or **All secure** when the list includes a cover or lock. Tap the secure
+  header to reveal **Open** and **Unlock** controls, then tap it again to fold
+  them away. Device buttons send their commands immediately and separately
+  from the row's tap action.
+- Tap a row or chip to open details or run the configured `tap_action`.
 
 ### Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `entities` | — | binary_sensors, as ids or `{entity, name, icon, tap_action}` |
-| `auto_discover` | `true` without `entities` | Find the sensors by device class |
+| `entities` | — | Binary sensors, covers and locks, as ids or `{entity, name, icon, tap_action}` |
+| `auto_discover` | `true` without `entities` | Discover opening sensors, eligible covers and locks |
 | `include_area`, `include_label`, `exclude_entities` | — | Narrow discovery |
+| `include_covers` | `true` | Discover garage, gate and door covers |
+| `include_locks` | `true` | Discover lock entities |
+| `show_open_controls` | `true` | Let the secure header expand to show Open and Unlock buttons |
 | `title`, `icon` | "Windows and doors", by state | Header |
 | `outdoor_temperature` | — | Temperature sensor for the cold warning |
 | `warn_after_minutes` | `15` | Minutes open before a row warns |
@@ -8172,11 +8176,11 @@ modes:
 
 | State | Header | Below |
 | --- | --- | --- |
-| Disarmed | Neutral, "Disarmed · since 18:29" | The mode buttons; open sensors as chips, plus "3 sensors ok" |
+| Disarmed | Neutral, "Disarmed · since 18:29" | Tap the header to show the mode buttons and sensor chips |
 | Arming | Warning colour, pulsing, "To: Away" | A countdown pill and bar when the delay is known; the target mode in the warning colour |
-| Armed | Accent, "Armed · Home", a "Secured" pill | The mode buttons, the active one a full pill — switch between armed modes directly |
+| Armed | Accent, "Armed · Home", a "Secured" pill | The mode buttons, the active one a full pill — switch between armed modes directly, or enter a disarm code when required |
 | Entry delay | Warning colour, countdown | The code entry opens by itself |
-| Triggered | The whole card in the error colour, who or what triggered it and when | One wide "Disarm" button that opens the code entry |
+| Triggered | The whole card in the error colour, who or what triggered it and when | Disarm keypad when a code is required, or a wide Disarm button |
 | Unavailable | Neutral | The buttons, disabled |
 
 ### Codes
@@ -8198,8 +8202,10 @@ warning colour (a tap opens them), the closed ones are counted.
 
 ### Compact
 
-`compact: true` is one row: the header and its pill. A tap on it opens the
-buttons; an entry delay or a triggered alarm opens them by itself.
+The disarmed card shows a single header row by default. Tap the header to
+show or hide the arm controls and sensor chips. Set `collapse_disarmed: false`
+to keep those controls visible. The armed, arming, pending and triggered
+states show their controls automatically.
 
 ### Configuration options
 
@@ -8210,7 +8216,8 @@ buttons; an entry delay or a triggered alarm opens them by itself.
 | `modes` | list | supported modes, max. 4 | The buttons, in order. Each a mode (`disarmed`, `armed_home`, `armed_away`, `armed_night`, `armed_vacation`, `armed_custom_bypass`) or `{ mode, name, icon }` |
 | `sensors` | list | – | `binary_sensor`s for the status line, when the integration does not list open sensors itself |
 | `show_sensors` | boolean | `true` | The open / ok sensor chips |
-| `compact` | boolean | `false` | One row; a tap opens the buttons |
+| `collapse_disarmed` | boolean | `true` | Fold the disarmed controls into the header |
+| `compact` | boolean | `false` | Also fold the controls while disarming or unavailable |
 | `accent_color` | string | `primary` | The armed colour |
 | `text_color` / `secondary_text_color` / `card_background` | string | theme | As on every card |
 | `glass_background` | boolean | `true` | Frosted glass background |

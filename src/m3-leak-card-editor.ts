@@ -232,7 +232,9 @@ export class M3LeakCardEditor extends LitElement implements LovelaceCardEditor {
       ? this._t("editor_leak_max_visible_helper")
       : schema.name === "stale_check"
         ? this._t("editor_leak_stale_check_helper")
-        : undefined;
+        : schema.name === "collapse_ok"
+          ? this._t("editor_leak_collapse_ok_helper")
+          : undefined;
 
   private _computeLabel = (schema: SchemaEntry): string => {
     const map: Record<string, TranslationKey> = {

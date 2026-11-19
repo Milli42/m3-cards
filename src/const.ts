@@ -10,7 +10,7 @@ import {
   LEVEL_TRACK_RADIUS,
 } from "./shared/level-slider";
 
-export const CARD_VERSION = "2.11.0";
+export const CARD_VERSION = "2.12.0";
 
 export const DEFAULT_CLIMATE_RADIUS = RADIUS.cardHero;
 export const DEFAULT_MINI_RADIUS = RADIUS.card;
@@ -3169,8 +3169,6 @@ export const DEFAULT_CHECKIN_RADIUS = RADIUS.card;
 // ---- alarm card (#47) -------------------------------------------------------
 export const DEFAULT_ALARM_RADIUS = RADIUS.card;
 /** Hero header, as the room and weather cards: a 56px squircle. */
-export const ALARM_HEADER_ICON = 56;
-export const ALARM_HEADER_ICON_RADIUS = RADIUS.squircle56;
 /** The connected mode buttons: 3px apart, 24px outer and 8px inner corners. */
 export const ALARM_MODE_HEIGHT = 64;
 export const ALARM_MODE_GAP = 3;
