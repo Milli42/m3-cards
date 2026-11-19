@@ -3452,6 +3452,10 @@ export interface M3LightsOverviewCardConfig extends EntityFilterConfig, DetailMo
   icon?: string;
   show_header?: boolean;
   show_count?: boolean;
+  /** Show the whole-home Fans tile. Defaults to true. */
+  show_fans?: boolean;
+  /** Explicit fan entities, replacing automatic fan discovery when supplied. */
+  fans?: string[];
   show_area?: boolean;
   hide_empty_rooms?: boolean;
   group_handling?: LightGroupHandling;

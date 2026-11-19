@@ -489,6 +489,15 @@ export class M3BatteryCard extends TemplatedCard(LitElement) implements Lovelace
         --mdc-icon-size: 16px;
       }
 
+      .lr-row {
+        gap: 8px;
+        padding-inline: 9px;
+      }
+
+      .lr-icon ha-icon {
+        --mdc-icon-size: 14px;
+      }
+
       .battery-name {
         font-size: 13px;
         font-weight: 500;

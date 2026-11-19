@@ -891,6 +891,33 @@ export interface DiscoverLightRoomsOptions {
   toggleGroupHandling?: LightGroupHandling;
 }
 
+const fanIdsByStates = new WeakMap<HomeAssistant["states"], string[]>();
+
+function fanIdsInStates(states: HomeAssistant["states"]): string[] {
+  let ids = fanIdsByStates.get(states);
+  if (!ids) {
+    ids = Object.keys(states).filter((id) => id.startsWith("fan."));
+    fanIdsByStates.set(states, ids);
+  }
+  return ids;
+}
+
+export function overviewFanIds(
+  hass: HomeAssistant,
+  config: Pick<EntityFilterConfig, "exclude_entities" | "exclude_labels"> & { fans?: string[] },
+): string[] {
+  const passesFilter = buildEntityFilterPredicate({
+    exclude_entities: config.exclude_entities,
+    exclude_labels: config.exclude_labels,
+  });
+  return [...new Set(config.fans ?? fanIdsInStates(hass.states))].filter((id) => {
+    if (!id.startsWith("fan.") || !hass.states[id]) return false;
+    const entry = hass.entities?.[id] as EntityRegistryEntry | undefined;
+    const device = entry?.device_id ? hass.devices?.[entry.device_id] as DeviceRegistryEntry | undefined : undefined;
+    return passesFilter({ entityId: id, labels: [...(entry?.labels ?? []), ...(device?.labels ?? [])] });
+  });
+}
+
 export interface DiscoveredLightRoom {
   areaId: string;
   name: string;
@@ -930,7 +957,9 @@ export async function discoverLightRooms(
   // really are lights.
   const domains = opts.domains?.length ? opts.domains : ["light"];
   const prefixes = domains.map((d) => `${d}.`);
-  const lightIds = Object.keys(hass.states).filter((id) => prefixes.some((p) => id.startsWith(p)));
+  const lightIds = Object.keys(hass.states).filter(
+    (id) => !id.startsWith("fan.") && prefixes.some((p) => id.startsWith(p)),
+  );
   if (lightIds.length === 0) return [];
 
   const showEntity = buildEntityFilterPredicate(opts.filter);

@@ -10,7 +10,7 @@ import {
   LEVEL_TRACK_RADIUS,
 } from "./shared/level-slider";
 
-export const CARD_VERSION = "2.12.0";
+export const CARD_VERSION = "2.13.0";
 
 export const DEFAULT_CLIMATE_RADIUS = RADIUS.cardHero;
 export const DEFAULT_MINI_RADIUS = RADIUS.card;
@@ -706,12 +706,12 @@ export const BATTERY_COLOR_LOW = PALETTE.solar;
 export const BATTERY_COLOR_MEDIUM = PALETTE.light;
 export const BATTERY_COLOR_OK = PALETTE.ok;
 export const BATTERY_COLOR_UNAVAILABLE = PALETTE.off;
-export const BATTERY_ROW_HEIGHT = HEIGHT.rowTall;
+export const BATTERY_ROW_HEIGHT = 42;
 export const BATTERY_ROW_RADIUS = RADIUS.row;
 export const BATTERY_ROW_RADIUS_ACTIVE = RADIUS.rowActive;
-export const BATTERY_ICON_SIZE = 32;
-export const BATTERY_ICON_RADIUS = RADIUS.squircle32;
-export const BATTERY_ROW_GAP = SPACING.rowGap;
+export const BATTERY_ICON_SIZE = 24;
+export const BATTERY_ICON_RADIUS = 8;
+export const BATTERY_ROW_GAP = 4;
 /** How strongly a compact row fills to its charge; the full rows use the list row's own 16 %. */
 export const BATTERY_FILL_TINT = 16;
 export const BATTERY_CHIP_RADIUS = RADIUS.chip;

@@ -9,6 +9,7 @@ import {
   discoverOpeningEntities,
   discoverPersonEntities,
   isHiddenEntity,
+  overviewFanIds,
 } from "./ha-registry";
 import type { HomeAssistant, HassEntity } from "../types";
 
@@ -77,7 +78,54 @@ describe("discoverOpeningEntities", () => {
   });
 });
 
+describe("overviewFanIds", () => {
+  const hass = hassFromFixture({
+    states: {
+      "fan.office": { state: "on" },
+      "fan.unassigned": { state: "off" },
+      "fan.attic": { state: "off" },
+      "fan.bedroom": { state: "off" },
+      "light.office": { state: "on" },
+    },
+    entities: [],
+  });
+  hass.entities = {
+    "fan.office": { area_id: "office" },
+    "fan.attic": { labels: ["hide"] },
+    "fan.bedroom": { device_id: "bedroom" },
+  };
+  hass.devices = { bedroom: { labels: ["hide"] } };
+
+  it("ignores room and state filters while honoring entity and label exclusions", () => {
+    const config = { include_area: ["office"], include_state: ["on"], exclude_entities: ["fan.office"], exclude_labels: ["hide"] };
+    expect(overviewFanIds(hass, config)).toEqual(["fan.unassigned"]);
+  });
+
+  it("lets a manual list replace discovery and discards missing and duplicate IDs", () => {
+    expect(overviewFanIds(hass, {
+      fans: ["fan.office", "fan.office", "fan.missing", "light.office", "fan.attic"],
+      exclude_labels: ["hide"],
+    })).toEqual(["fan.office"]);
+    expect(overviewFanIds(hass, { fans: [] })).toEqual([]);
+  });
+});
+
 describe("discoverLightRooms", () => {
+  it("keeps fans out of rooms even when the fan domain is configured", async () => {
+    const hass = hassFromFixture({
+      states: { "light.office": { state: "on" }, "fan.office": { state: "on" } },
+      entities: [
+        { entity_id: "light.office", area_id: "office" },
+        { entity_id: "fan.office", area_id: "office" },
+      ],
+      areas: [{ area_id: "office", name: "Office" }],
+    });
+
+    expect(await discoverLightRooms(hass, { domains: ["light", "fan"] })).toMatchObject([
+      { entities: ["light.office"], toggleEntities: ["light.office"] },
+    ]);
+  });
+
   it("groups lights by area and names/icons the room from the area registry", async () => {
     const hass = hassFromFixture({
       states: { "light.kitchen_1": { state: "on" }, "light.kitchen_2": { state: "off" } },

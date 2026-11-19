@@ -41,6 +41,20 @@ auto_discover: true
   `prefer_groups` counts only the group, `prefer_members` only the members.
   Default `all` counts both.
 
+### Fans
+
+When fans are available, the first tile shows how many are on. Fans are
+discovered across the whole home, including entities without an area.
+`exclude_entities` and `exclude_labels` apply to fans independently of the
+room filters. Set `fans` to an explicit list of entity IDs to replace fan
+discovery, or set `show_fans: false` to hide the tile. The header shows the
+number of fans on alongside the room and light counts.
+
+Tap or hold the Fans tile to open its fan controls. Tap an individual fan
+to toggle it. Fans with adjustable speed get a pill slider that follows
+their reported speed steps. Dragging the slider turns an off fan on at the
+selected speed. `toggle_on_brightness` applies only to lights.
+
 ### What's shown vs. what a tap switches
 
 A tile's on/off state and count reflect every light the display filter above
@@ -67,7 +81,7 @@ Same action system as Climate Overview: `tap_action` (default `toggle`) /
 Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
 `[[name]]` placeholders resolved against the tapped room).
 
-The default grid popup shows a brightness slider beneath each dimmable light.
+The default grid popup shows a brightness pill beneath each dimmable light.
 Drag the slider or use the arrow keys in 5% steps. Adjusting an off light turns
 it on at the selected brightness. Tap the light tile to toggle it, or tap the
 room tile on the main card to toggle the room. Both taps turn dimmable lights
@@ -93,7 +107,9 @@ sliders on a standalone card in `entities` view, set
 | `view` | `rooms` \| `entities` | `rooms` | Tile per room, or a flat per-light list |
 | `sort` | `name` \| `area` \| `on_first` | `name` | Tile order |
 | `show_header` | boolean | `true` | Card header |
-| `show_count` | boolean | `true` | "N/total" next to the state on a multi-light tile |
+| `show_count` | boolean | `true` | "N/total" next to the state on a multi-light or Fans tile |
+| `show_fans` | boolean | `true` | Show the Fans tile before the light tiles when fans are available |
+| `fans` | list\<string\> | auto-discovered | Explicit fan entity IDs. An empty list disables fan discovery |
 | `shape_by_state` | boolean | `false` | A tile whose lights are all off rounds out; one with a light on keeps its corners |
 | `show_brightness_slider` | boolean | `false` | Show brightness sliders for dimmable lights in `entities` view |
 | `show_area` | boolean | `true` | Room name caption in `entities` view |
