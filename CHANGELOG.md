@@ -6,6 +6,22 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.13.0] – 2026-11-19
+
+### Changed
+
+### Added
+
+- **Lights Overview** shows a whole-home Fans tile with individual fan
+  toggles and speed controls. Use `show_fans` to hide it or `fans` to select
+  the fan entities manually.
+
+### Changed
+
+- **Lights Overview** removes visible percentages from brightness sliders
+  and keeps their values available to screen readers.
+- **Battery** uses shorter rows with smaller icon wells and tighter spacing.
+
 ## [2.12.0] – 2026-11-19
 
 ### Changed

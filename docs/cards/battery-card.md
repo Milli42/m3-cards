@@ -9,8 +9,8 @@ section_order: 13
 ---
 
 An overview of all battery-level sensors as a sorted list with threshold-
-based coloring (critical/low/medium/ok), each row filled to its charge, and a collapsible
-section for the remaining devices.
+based coloring (critical/low/medium/ok). Compact rows fill to the battery
+charge, and a collapsible section holds the remaining devices.
 
 <img src="docs/images/battery-card.png" alt="Battery Card" width="440">
 

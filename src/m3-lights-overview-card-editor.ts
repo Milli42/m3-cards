@@ -123,7 +123,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       { name: "include_labels", selector: { label: { multiple: true } } },
       { name: "exclude_labels", selector: { label: { multiple: true } } },
       { name: "include_entities", selector: { entity: { domain: domains, multiple: true } } },
-      { name: "exclude_entities", selector: { entity: { domain: domains, multiple: true } } },
+      { name: "exclude_entities", selector: { entity: { domain: [...new Set([...domains, "fan"])], multiple: true } } },
       { name: "include_state", selector: this._stateSelector() },
       { name: "exclude_state", selector: this._stateSelector() },
       { name: "group_handling", selector: this._groupHandlingSelector() },
@@ -170,6 +170,8 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       },
       { name: "show_header", selector: { boolean: {} } },
       { name: "show_count", selector: { boolean: {} } },
+      { name: "show_fans", selector: { boolean: {} } },
+      { name: "fans", selector: { entity: { domain: "fan", multiple: true } } },
       { name: "shape_by_state", selector: { boolean: {} } },
       { name: "show_area", selector: { boolean: {} } },
       { name: "show_brightness_slider", selector: { boolean: {} } },
@@ -260,6 +262,8 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       sort: "editor_lights_sort",
       show_header: "editor_show_header",
       show_count: "editor_lights_show_count",
+      show_fans: "editor_lights_show_fans",
+      fans: "editor_lights_fans",
       show_area: "editor_lights_show_area",
       show_brightness_slider: "editor_lights_show_brightness_slider",
       hide_empty_rooms: "editor_lights_hide_empty_rooms",
@@ -282,7 +286,12 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
 
   private _valueChanged(ev: CustomEvent): void {
     if (!this._config) return;
-    this._config = { ...this._config, ...ev.detail.value };
+    const value = ev.detail.value as Partial<M3LightsOverviewCardConfig>;
+    const config = { ...this._config, ...value };
+    // Clearing a manual selection restores discovery. Preserve an explicit
+    // empty list loaded from YAML when another field changes.
+    if (config.fans?.length === 0 && this._config.fans?.length !== 0) delete config.fans;
+    this._config = config;
     fireEvent(this, "config-changed", { config: this._config });
   }
 
@@ -453,6 +462,8 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       sort: cfg.sort ?? "name",
       show_header: cfg.show_header ?? true,
       show_count: cfg.show_count ?? true,
+      show_fans: cfg.show_fans ?? true,
+      fans: cfg.fans,
       shape_by_state: cfg.shape_by_state ?? false,
       show_area: cfg.show_area ?? true,
       show_brightness_slider: cfg.show_brightness_slider ?? false,

@@ -3,7 +3,6 @@ import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
-  HassEntity,
   M3LightsOverviewCardConfig,
   LightsOverviewPopupMode,
   HaActionConfig,
@@ -30,7 +29,7 @@ import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, foregroun
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { renderCardHeader, cardHeaderStyles } from "./shared/card-header";
 import { shouldAnimate, STANDARD_EASING } from "./shared/animation";
-import { discoverLightRooms, type DiscoveredLightRoom } from "./shared/ha-registry";
+import { discoverLightRooms, overviewFanIds, type DiscoveredLightRoom } from "./shared/ha-registry";
 import {
   buildStatePredicate,
   hasStateFilter,
@@ -55,12 +54,8 @@ import { localize, type TranslationKey } from "./localize";
 import { TemplatedCard } from "./shared/templated-card";
 import { openEntityDetail } from "./shared/entity-detail";
 import { DragThrottle } from "./shared/drag-throttle";
-import {
-  clampLightBrightnessPercent,
-  isDimmableLight,
-  lightBrightnessPercent,
-  splitLightTurnOnTargets,
-} from "./shared/light-brightness";
+import { splitLightTurnOnTargets } from "./shared/light-brightness";
+import { entityLevel, type EntityLevel } from "./shared/entity-level";
 import { capturePointer, sliderPointer, SLIDER_TOUCH_ACTION } from "./shared/slider-intent";
 import { stopSwipe } from "./shared/swipe";
 
@@ -81,6 +76,7 @@ interface LightsOverviewTile {
   onCount: number;
   total: number;
   unavailable: boolean;
+  fanGroup?: boolean;
   areaId?: string;
   areaName?: string;
   /** Room name shown under an individual light, in the "entities" view. */
@@ -121,7 +117,8 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   private _popupCardEl?: HTMLElement & PopupCardHandle;
   private _popupCardKey?: string;
   private _detailCard = new DetailCardController();
-  private readonly _brightnessDrags = new Map<string, { slider: HTMLElement; value: number; throttle: DragThrottle<number> }>();
+  private _fanPopup = false;
+  private readonly _levelDrags = new Map<string, { slider: HTMLElement; value: number; throttle: DragThrottle<number> }>();
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import("./m3-lights-overview-card-editor");
@@ -143,6 +140,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       auto_discover: config.rooms?.length ? false : true,
       sort: "name",
       show_count: true,
+      show_fans: true,
       ...config,
     };
     this._lastDiscoverKey = undefined;
@@ -159,8 +157,8 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     this._gestures.cancel();
-    for (const drag of this._brightnessDrags.values()) drag.throttle.clear();
-    this._brightnessDrags.clear();
+    for (const drag of this._levelDrags.values()) drag.throttle.clear();
+    this._levelDrags.clear();
     this._closePopup();
   }
 
@@ -236,6 +234,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     const toggleState = buildStatePredicate(hass, toggleFilter);
     const excludeToggleGlobal = new Set(cfg.exclude_toggle_entities ?? []);
 
+    const isRoomEntity = (id: string) => this._fanPopup || !id.startsWith("fan.");
     const rooms = cfg.rooms?.length
       ? cfg.rooms.map((r, i) => {
           const exclude = new Set([...(r.exclude_toggle_entities ?? []), ...excludeToggleGlobal]);
@@ -244,8 +243,8 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
             key: `manual:${i}`,
             name: r.name,
             icon: r.icon,
-            entities: (r.entities ?? []).filter(showState),
-            toggleEntities: toggleSource.filter((id) => !exclude.has(id)).filter(toggleState),
+            entities: (r.entities ?? []).filter(isRoomEntity).filter(showState),
+            toggleEntities: toggleSource.filter(isRoomEntity).filter((id) => !exclude.has(id)).filter(toggleState),
             areaId: undefined as string | undefined,
           };
         })
@@ -270,7 +269,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
             return {
               key: `${room.key}:entity:${id}:${index}`,
               name: (st.attributes.friendly_name as string | undefined) ?? id,
-              icon: (st.attributes.icon as string | undefined) ?? (on ? "mdi:lightbulb" : "mdi:lightbulb-outline"),
+              icon: (st.attributes.icon as string | undefined) ?? (this._fanPopup
+                ? (on ? "mdi:fan" : "mdi:fan-off")
+                : (on ? "mdi:lightbulb" : "mdi:lightbulb-outline")),
               entities: [id],
               switchable: switchableSet.has(id) ? [id] : [],
               onCount: on ? 1 : 0,
@@ -309,6 +310,28 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       .filter((tile) => !((cfg.hide_empty_rooms || forceHideEmpty) && tile.total === 0));
   }
 
+  private _fanIds(hass = this.hass): string[] {
+    const cfg = this._config;
+    return hass && cfg && cfg.show_fans !== false ? overviewFanIds(hass, cfg) : [];
+  }
+
+  private _fanTile(): LightsOverviewTile | undefined {
+    const entities = this._fanIds();
+    if (!entities.length) return undefined;
+    const onCount = entities.filter((id) => this.hass?.states[id]?.state === "on").length;
+    return {
+      key: "fans",
+      name: this._t("lights_overview_fans"),
+      icon: onCount ? "mdi:fan" : "mdi:fan-off",
+      entities,
+      switchable: [],
+      onCount,
+      total: entities.length,
+      unavailable: false,
+      fanGroup: true,
+    };
+  }
+
   private _sortTiles(tiles: LightsOverviewTile[]): LightsOverviewTile[] {
     const sort = this._config?.sort ?? "name";
     if (sort === "on_first") {
@@ -333,6 +356,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     if (!hass || tile.switchable.length === 0) return;
     if (tile.switchable.some((id) => hass.states[id]?.state === "on")) {
       hass.callService("homeassistant", "turn_off", {}, { entity_id: tile.switchable });
+      return;
+    }
+
+    if (this._fanPopup) {
+      hass.callService("homeassistant", "turn_on", {}, { entity_id: tile.switchable });
       return;
     }
 
@@ -364,6 +392,10 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
   private _runAction(tile: LightsOverviewTile, kind: ActionKind): void {
     if (!this.hass) return;
+    if (tile.fanGroup) {
+      if (kind !== "double_tap") this._openPopup(tile);
+      return;
+    }
     runHaAction(this.hass, this._resolveAction(kind), {
       source: this,
       entityId: tile.entities[0],
@@ -389,7 +421,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   private _openPopup(tile: LightsOverviewTile): void {
     // "default-detail" isn't a card popup at all — it's HA's own more-info
     // dialog for the tile's first entity, so the internal <dialog> never opens.
-    if (this._popupMode() === "default-detail") {
+    if (!tile.fanGroup && this._popupMode() === "default-detail") {
       openEntityDetail(this, tile.entities[0]);
       return;
     }
@@ -412,7 +444,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   private _maybeSyncDetailCard(): void {
     const tile = this._popupTile;
     const skeleton = this._popupMode() === "custom" ? this._config?.popup?.card : undefined;
-    if (!tile || !this.hass || !skeleton) {
+    if (!tile || tile.fanGroup || !this.hass || !skeleton) {
       this._detailCard.reset();
       return;
     }
@@ -435,6 +467,29 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   private _popupConfig(tile: LightsOverviewTile): M3LightsOverviewCardConfig | undefined {
     const cfg = this._config;
     if (!cfg) return undefined;
+    if (tile.fanGroup) {
+      return {
+        ...cfg,
+        name: tile.name,
+        icon: "mdi:fan",
+        rooms: [{ name: tile.name, entities: this._fanIds() }],
+        auto_discover: false,
+        view: "entities",
+        show_fans: false,
+        show_area: false,
+        show_header: true,
+        show_brightness_slider: true,
+        include_state: undefined,
+        exclude_state: undefined,
+        exclude_toggle_entities: undefined,
+        toggle_filter: undefined,
+        tap_action: { action: "toggle" },
+        hold_action: { action: "more-info" },
+        double_tap_action: undefined,
+        popup: undefined,
+        glass_background: false,
+      };
+    }
     const popup = cfg.popup ?? {};
     const merged = mergeEntityFilters(configFilter(cfg), popup, popup.inherit_filters ?? true);
     // A tile from an area re-runs discovery scoped to that area, which also
@@ -460,6 +515,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       toggle_filter: undefined,
       toggle_inherit_filters: undefined,
       view,
+      show_fans: false,
       sort: popup.sort ?? "name",
       group_handling: popup.group_handling ?? cfg.group_handling,
       toggle_group_handling: view === "entities" ? undefined : popup.toggle_group_handling,
@@ -488,6 +544,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       existingEl: this._popupCardEl,
       existingKey: this._popupCardKey,
     });
+    if (el instanceof M3LightsOverviewCard) el._fanPopup = !!tile.fanGroup;
     this._popupCardEl = el;
     this._popupCardKey = key;
     return this._popupCardEl;
@@ -500,7 +557,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       this._popupCardKey = undefined;
       return nothing;
     }
-    const content = this._popupMode() === "custom" ? this._detailCardEl : this._syncScopedPopupCard(tile);
+    const content = !tile.fanGroup && this._popupMode() === "custom"
+      ? this._detailCardEl
+      : this._syncScopedPopupCard(tile);
 
     return renderPopupDialog({
       content,
@@ -522,15 +581,22 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
-    return discoveryChangeMatters(changed, this.hass, this._watchedEntities());
+    const previous = changed.get("hass") as HomeAssistant | undefined;
+    if (this._config?.show_fans !== false && previous && this.hass
+      && (previous.entities !== this.hass.entities || previous.devices !== this.hass.devices)) return true;
+    return discoveryChangeMatters(changed, this.hass, [
+      ...this._watchedEntities(),
+      ...this._fanIds(),
+      ...(previous ? this._fanIds(previous) : []),
+    ]);
   }
 
   protected updated(changed: PropertyValues): void {
     super.updated(changed);
-    for (const [id, drag] of this._brightnessDrags) {
+    for (const [id, drag] of this._levelDrags) {
       if (drag.slider.isConnected) continue;
       drag.throttle.clear();
-      this._brightnessDrags.delete(id);
+      this._levelDrags.delete(id);
     }
     this._maybeDiscover();
     if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
@@ -546,14 +612,15 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
     const view = this._config.view ?? "rooms";
     const tiles = this._sortTiles(this._buildTiles());
+    const fans = this._fanTile();
     const onRooms = tiles.filter((t) => t.onCount > 0).length;
     const onLights = tiles.reduce((sum, t) => sum + t.onCount, 0);
 
     const name = this._config.name || this._t("lights_overview_default_name");
     const icon = this._config.icon || (view === "entities" ? "mdi:lightbulb-multiple" : DEFAULT_LIGHTS_OVERVIEW_ICON);
     const emptyKey: TranslationKey = view === "entities" ? "lights_overview_empty_entities" : "lights_overview_empty";
-    const subtitle =
-      tiles.length === 0
+    const lightsSubtitle =
+      tiles.length === 0 && !fans
         ? this._t(emptyKey)
         : view === "entities"
           ? this._t("lights_overview_subtitle_entities")
@@ -562,6 +629,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
           : this._t("lights_overview_subtitle")
               .replace("{rooms}", String(onRooms))
               .replace("{lights}", String(onLights));
+
+    const subtitle = fans
+      ? `${lightsSubtitle} · ${this._t(fans.onCount === 1 ? "lights_overview_fan_on" : "lights_overview_fans_on")
+          .replace("{count}", String(fans.onCount))}`
+      : lightsSubtitle;
 
     const onColor = this._config.on_color ? resolveThemeColor(this._config.on_color) : LIGHTS_OVERVIEW_COLOR_ON;
     const offColor = this._config.off_color ? resolveThemeColor(this._config.off_color) : LIGHTS_OVERVIEW_COLOR_OFF;
@@ -587,10 +659,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         >
           ${this._config.show_header === false ? nothing : renderCardHeader({ icon, name, subtitle })}
 
-          ${tiles.length === 0
+          ${tiles.length === 0 && !fans
             ? html`<div class="empty-state">${this._t(emptyKey)}</div>`
             : html`
                 <div class="room-grid ${view === "entities" ? "entity-grid" : ""}">
+                  ${fans ? this._renderTile(fans, onColor, offColor) : nothing}
                   ${view === "entities" && this._config.show_brightness_slider
                     ? repeat(tiles, (tile) => tile.key, (tile) => this._renderTile(tile, onColor, offColor))
                     : tiles.map((tile) => this._renderTile(tile, onColor, offColor))}
@@ -603,11 +676,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   }
 
   private _renderTile(tile: LightsOverviewTile, onColor: string, offColor: string) {
-    const hasDoubleTap = (this._config?.double_tap_action?.action ?? "none") !== "none";
+    const hasDoubleTap = !tile.fanGroup && (this._config?.double_tap_action?.action ?? "none") !== "none";
     const holdAction = this._resolveAction("hold");
     const listeners = this._gestures.listeners({
       onTap: () => this._runAction(tile, "tap"),
-      onHold: holdAction.action === "none" ? undefined : () => this._runAction(tile, "hold"),
+      onHold: tile.fanGroup || holdAction.action !== "none" ? () => this._runAction(tile, "hold") : undefined,
       onDoubleTap: hasDoubleTap ? () => this._runAction(tile, "double_tap") : undefined,
       onPressChange: (pressed) => {
         this._pressedKey = pressed ? tile.key : undefined;
@@ -615,12 +688,15 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     });
     const on = tile.onCount > 0;
     const color = on ? onColor : offColor;
+    const stateIcon = tile.fanGroup || this._fanPopup
+      ? (on ? "mdi:fan" : "mdi:fan-off")
+      : (on ? "mdi:lightbulb-on" : "mdi:lightbulb-outline");
     const stateLabel = on ? this._t("lights_overview_on") : this._t("lights_overview_off");
     const ariaLabel = `${tile.name}: ${stateLabel}`;
 
     const body = html`
       <div
-        class="room-tile ${tile.unavailable ? "unavailable" : ""} ${tile.switchable.length === 0
+        class="room-tile ${tile.unavailable ? "unavailable" : ""} ${!tile.fanGroup && tile.switchable.length === 0
           ? "not-switchable"
           : ""} ${on ? "is-on" : ""} ${this._pressedKey === tile.key ? "pressed" : ""} ${this._config?.shape_by_state === true
           ? "shaped"
@@ -642,11 +718,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
           <span class="tile-name">${tile.name}</span>
         </div>
         <div class="tile-state">
-          <ha-icon class="bulb" icon=${on ? "mdi:lightbulb-on" : "mdi:lightbulb-outline"}></ha-icon>
+          <ha-icon class="bulb" icon=${stateIcon}></ha-icon>
           <span class="state-text">${stateLabel}</span>
           ${tile.secondary
             ? html`<span class="tile-secondary" title=${tile.secondary}>${tile.secondary}</span>`
-            : this._config?.show_count !== false && tile.total > 1
+            : this._config?.show_count !== false && (tile.fanGroup || tile.total > 1)
               ? html`<span class="tile-secondary">
                   ${this._t("lights_overview_count")
                     .replace("{on}", String(tile.onCount))
@@ -656,48 +732,48 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         </div>
       </div>
     `;
-    const entity = this._config?.view === "entities" && this._config.show_brightness_slider
+    const entity = !tile.fanGroup && this._config?.view === "entities" && this._config.show_brightness_slider
       ? this.hass?.states[tile.entities[0]]
       : undefined;
-    if (!entity || !isDimmableLight(entity)) return body;
+    const level = entity && entityLevel(entity);
+    if (!entity || !level) return body;
 
     return html`
       <div class="tile-with-slider" style=${`--tile-color: ${color};`}>
         ${body}
-        ${this._renderBrightnessSlider(entity, tile.name, tile.unavailable)}
+        ${this._renderLevelSlider(entity.entity_id, level, tile.name, tile.unavailable)}
       </div>
     `;
   }
 
-  private _setBrightness(entityId: string, percent: number): void {
+  private _setLevel(entityId: string, level: EntityLevel, percent: number): void {
     const entity = this.hass?.states[entityId];
     if (!entity || entity.state === "unavailable" || entity.state === "unknown") return;
-    this.hass?.callService("light", "turn_on", { brightness_pct: percent }, { entity_id: entityId });
+    this.hass?.callService(level.domain, level.service, { [level.field]: percent }, { entity_id: entityId });
   }
 
-  private _renderBrightnessSlider(entity: HassEntity, name: string, unavailable: boolean) {
-    const id = entity.entity_id;
-    const percent = this._brightnessDrags.get(id)?.value ?? lightBrightnessPercent(entity);
+  private _renderLevelSlider(id: string, level: EntityLevel, name: string, unavailable: boolean) {
+    const percent = this._levelDrags.get(id)?.value ?? level.value;
     const percentAt = (e: PointerEvent): number => {
       const track = (e.currentTarget as HTMLElement).firstElementChild!;
       const rect = track.getBoundingClientRect();
-      return clampLightBrightnessPercent(rect.width > 0 ? ((e.clientX - rect.left) / rect.width) * 100 : 0);
+      return level.snap(rect.width > 0 ? ((e.clientX - rect.left) / rect.width) * 100 : 0);
     };
     const pointer = sliderPointer({
       down: (e) => {
-        if (unavailable || this._brightnessDrags.has(id)) return;
+        if (unavailable || this._levelDrags.has(id)) return;
         e.preventDefault();
         const slider = e.currentTarget as HTMLElement;
         slider.focus();
         capturePointer(slider, e);
         const value = percentAt(e);
-        const throttle = new DragThrottle<number>((pct) => this._setBrightness(id, pct), LIGHT_THROTTLE_MS);
-        this._brightnessDrags.set(id, { slider, value, throttle });
+        const throttle = new DragThrottle<number>((pct) => this._setLevel(id, level, pct), LIGHT_THROTTLE_MS);
+        this._levelDrags.set(id, { slider, value, throttle });
         throttle.call(value);
         this.requestUpdate();
       },
       move: (e) => {
-        const drag = this._brightnessDrags.get(id);
+        const drag = this._levelDrags.get(id);
         if (!drag || drag.slider !== e.currentTarget) return;
         const value = percentAt(e);
         if (value === drag.value) return;
@@ -706,27 +782,27 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         this.requestUpdate();
       },
       up: (e) => {
-        const drag = this._brightnessDrags.get(id);
+        const drag = this._levelDrags.get(id);
         if (!drag || drag.slider !== e.currentTarget) return;
-        this._brightnessDrags.delete(id);
+        this._levelDrags.delete(id);
         drag.throttle.flush(e.type === "pointerup" ? percentAt(e) : drag.value);
         this.requestUpdate();
       },
     });
     const onKey = (e: KeyboardEvent): void => {
-      const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 5
-        : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -5 : 0;
+      const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? level.step
+        : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -level.step : 0;
       if (unavailable || step === 0) return;
       e.preventDefault();
       e.stopPropagation();
-      this._setBrightness(id, clampLightBrightnessPercent(percent + step));
+      this._setLevel(id, level, level.snap(percent + step));
     };
 
     return html`
       <div
         class="brightness-slider"
         role="slider"
-        aria-label=${`${name}: ${this._t("light_brightness_label")}`}
+        aria-label=${`${name}: ${this._t(level.label)}`}
         aria-valuemin="0"
         aria-valuemax="100"
         aria-valuenow=${percent}
@@ -763,7 +839,6 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         @keydown=${onKey}
       >
         <div class="brightness-track"></div>
-        <span class="brightness-value" aria-hidden="true">${percent}%</span>
       </div>
     `;
   }
@@ -811,18 +886,6 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
       .brightness-slider:focus-visible {
         outline: 2px solid var(--tile-color);
-      }
-
-      .brightness-value {
-        position: absolute;
-        inset-inline-end: 6px;
-        padding: 2px 6px;
-        border-radius: inherit;
-        background: rgb(0 0 0 / 75%);
-        color: white;
-        font-size: 12px;
-        font-variant-numeric: tabular-nums;
-        pointer-events: none;
       }
 
       .brightness-track {
