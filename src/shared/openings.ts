@@ -7,6 +7,29 @@ import type { HaActionConfig, HassEntity } from "../types";
 /** The device classes the card shows, and the ones auto-discovery looks for. */
 export const OPENING_DEVICE_CLASSES = ["door", "window", "opening", "garage_door"] as const;
 
+export const OPENING_COVER_CLASSES = ["garage", "gate", "door"] as const;
+
+export type OpeningKind = "cover" | "lock" | "sensor";
+
+export function openingKind(id: string): OpeningKind {
+  if (id.startsWith("cover.")) return "cover";
+  if (id.startsWith("lock.")) return "lock";
+  return "sensor";
+}
+
+export function preferOpeningCovers(
+  ids: string[],
+  deviceIdFor: (id: string) => string | null | undefined,
+): string[] {
+  const coveredDevices = new Set<string>();
+  for (const id of ids) {
+    if (openingKind(id) !== "cover") continue;
+    const device = deviceIdFor(id);
+    if (device) coveredDevices.add(device);
+  }
+  return ids.filter((id) => !id.startsWith("binary_sensor.") || !coveredDevices.has(deviceIdFor(id) ?? ""));
+}
+
 export interface OpeningEntryConfig {
   entity: string;
   name?: string;
@@ -37,13 +60,31 @@ export function resolveEntries(
   return discovered.map((id) => overrides.get(id) ?? { entity: id });
 }
 
-export type OpeningStatus = "open" | "closed" | "missing";
+export type OpeningStatus = "open" | "closed" | "missing" | "jammed";
 
-/** A binary sensor is open while `on`; anything but on/off is missing, never closed. */
 export function openingStatus(entity: HassEntity | undefined): OpeningStatus {
-  if (entity?.state === "on") return "open";
-  if (entity?.state === "off") return "closed";
+  if (!entity) return "missing";
+  const state = entity.state;
+  switch (openingKind(entity.entity_id)) {
+    case "cover":
+      if (state === "open" || state === "opening" || state === "closing") return "open";
+      if (state === "closed") return "closed";
+      break;
+    case "lock":
+      if (state === "unlocked" || state === "unlocking" || state === "open" || state === "opening") return "open";
+      if (state === "locked" || state === "locking") return "closed";
+      if (state === "jammed") return "jammed";
+      break;
+    case "sensor":
+      if (state === "on") return "open";
+      if (state === "off") return "closed";
+  }
   return "missing";
+}
+
+export function hasOutdoorWarning(id: string, deviceClass: unknown): boolean {
+  if (id.startsWith("cover.")) return OPENING_COVER_CLASSES.some((c) => c === deviceClass);
+  return id.startsWith("binary_sensor.") && (deviceClass === "window" || deviceClass === "door");
 }
 
 const ICONS: Record<string, [open: string, closed: string]> = {
@@ -54,7 +95,13 @@ const ICONS: Record<string, [open: string, closed: string]> = {
 };
 
 /** A window or a door, by device class; an unknown class reads as a window. */
-export function openingIcon(deviceClass: string | undefined, open: boolean): string {
+export function openingIcon(deviceClass: string | undefined, open: boolean, kind: OpeningKind = "sensor"): string {
+  if (kind === "lock") return open ? "mdi:lock-open-variant" : "mdi:lock";
+  if (kind === "cover") {
+    if (deviceClass === "garage") return open ? "mdi:garage-open" : "mdi:garage";
+    if (deviceClass === "gate") return open ? "mdi:gate-open" : "mdi:gate";
+    return open ? "mdi:door-open" : "mdi:door-closed";
+  }
   const pair = ICONS[deviceClass ?? ""] ?? ICONS.window;
   return open ? pair[0] : pair[1];
 }

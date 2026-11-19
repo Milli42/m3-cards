@@ -3617,10 +3617,9 @@ export interface M3AlarmCardConfig extends DetailModeConfig {
   sensors?: string[];
   /** The open/ok sensor chips. Default true. */
   show_sensors?: boolean;
-  /**
-   * One row: the header and its pill. A tap opens the buttons; an entry
-   * delay or a triggered alarm opens them by itself.
-   */
+  /** Fold the controls while disarmed. Default true. */
+  collapse_disarmed?: boolean;
+  /** Also fold the controls while disarming or unavailable. */
   compact?: boolean;
   /** The armed colour. Default the theme's primary colour. */
   accent_color?: string;
@@ -3713,10 +3712,16 @@ export interface OpeningsEntityConfig {
 /** Windows and doors: what is open, for how long, and whether it matters. */
 export interface M3OpeningsCardConfig extends DetailModeConfig {
   type: string;
-  /** binary_sensors of class door, window, opening or garage_door; the bare id works too. */
+  /** Opening sensors, covers or locks, as entity ids or entry objects. */
   entities?: Array<string | OpeningsEntityConfig>;
-  /** Find the sensors by device class; on by default when `entities` is left out. */
+  /** Discover openings. Defaults to true when no entities are listed. */
   auto_discover?: boolean;
+  /** Discover garage, gate and door covers. Default true. */
+  include_covers?: boolean;
+  /** Discover locks. Default true. */
+  include_locks?: boolean;
+  /** Offer Open and Unlock controls when all entries are secure. Default true. */
+  show_open_controls?: boolean;
   include_area?: string[];
   include_label?: string[];
   exclude_entities?: string[];

@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 import type { HassEntity } from "../types";
 import {
+  hasOutdoorWarning,
   latestClosed,
   normalizeEntries,
   numericState,
   openingIcon,
   openingStatus,
   openingWarning,
+  preferOpeningCovers,
   resolveEntries,
   sortOpen,
 } from "./openings";
 
-const st = (state: string) => ({ entity_id: "binary_sensor.x", state, attributes: {}, last_changed: "" }) as unknown as HassEntity;
+const st = (state: string, entity_id = "binary_sensor.x"): HassEntity => ({
+  entity_id, state, attributes: {}, last_changed: "", last_updated: "",
+});
 
 describe("normalizeEntries", () => {
   it("takes the short form and the long form", () => {
@@ -49,6 +53,56 @@ describe("openingStatus", () => {
     expect(openingStatus(st("unavailable"))).toBe("missing");
     expect(openingStatus(st("unknown"))).toBe("missing");
     expect(openingStatus(undefined)).toBe("missing");
+  });
+});
+
+describe("cover and lock states", () => {
+  it.each([
+    ["cover.garage", "open", "open"],
+    ["cover.garage", "opening", "open"],
+    ["cover.garage", "closing", "open"],
+    ["cover.garage", "closed", "closed"],
+    ["cover.garage", "unknown", "missing"],
+    ["lock.front", "unlocked", "open"],
+    ["lock.front", "unlocking", "open"],
+    ["lock.front", "open", "open"],
+    ["lock.front", "opening", "open"],
+    ["lock.front", "locked", "closed"],
+    ["lock.front", "locking", "closed"],
+    ["lock.front", "jammed", "jammed"],
+    ["lock.front", "unavailable", "missing"],
+  ])("maps %s in state %s to %s", (id, state, status) => {
+    expect(openingStatus(st(state, id))).toBe(status);
+  });
+});
+
+describe("preferOpeningCovers", () => {
+  const devices = new Map([
+    ["binary_sensor.garage", "garage"],
+    ["binary_sensor.window", "window"],
+    ["cover.garage", "garage"],
+    ["lock.garage", "garage"],
+  ]);
+
+  it("only removes binary sensors sharing a device with a listed cover", () => {
+    const ids = ["binary_sensor.garage", "binary_sensor.window", "binary_sensor.orphan", "cover.garage", "lock.garage", "cover.orphan"];
+    expect(preferOpeningCovers(ids, (id) => devices.get(id))).toEqual(ids.slice(1));
+    expect(preferOpeningCovers(["binary_sensor.garage", "lock.garage"], (id) => devices.get(id))).toEqual([
+      "binary_sensor.garage", "lock.garage",
+    ]);
+  });
+});
+
+describe("hasOutdoorWarning", () => {
+  it("only checks weather for eligible binary sensors and covers", () => {
+    expect(hasOutdoorWarning("binary_sensor.window", "window")).toBe(true);
+    expect(hasOutdoorWarning("binary_sensor.door", "door")).toBe(true);
+    expect(hasOutdoorWarning("binary_sensor.garage", "garage_door")).toBe(false);
+    expect(hasOutdoorWarning("cover.garage", "garage")).toBe(true);
+    expect(hasOutdoorWarning("cover.gate", "gate")).toBe(true);
+    expect(hasOutdoorWarning("cover.door", "door")).toBe(true);
+    expect(hasOutdoorWarning("cover.shade", "shade")).toBe(false);
+    expect(hasOutdoorWarning("lock.front", "door")).toBe(false);
   });
 });
 

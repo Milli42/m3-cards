@@ -20,12 +20,19 @@ import {
   renderAppearanceSection,
   type AppearanceState,
 } from "./shared/appearance-editor";
+import { OPENING_DEVICE_CLASSES } from "./shared/openings";
 import { discoverOpeningEntities } from "./shared/ha-registry";
 
 type ColorField = "color_open" | "color_warn" | "color_closed" | "text_color" | "secondary_text_color" | "card_background";
 
-const SENSOR_SELECTOR = {
-  entity: { domain: "binary_sensor", device_class: ["door", "window", "opening", "garage_door"] },
+const OPENING_SELECTOR = {
+  entity: {
+    filter: [
+      { domain: "binary_sensor", device_class: [...OPENING_DEVICE_CLASSES] },
+      { domain: "cover" },
+      { domain: "lock" },
+    ],
+  },
 };
 
 /** Values left out of the YAML rather than written: empty, or the default. */
@@ -34,6 +41,9 @@ const DEFAULTS: Record<string, unknown> = {
   cold_below: DEFAULT_OPENINGS_COLD_BELOW,
   max_chips: DEFAULT_OPENINGS_MAX_CHIPS,
   animation: "auto",
+  include_covers: true,
+  include_locks: true,
+  show_open_controls: true,
 };
 
 /**
@@ -104,6 +114,8 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
       includeAreas: cfg.include_area,
       includeLabels: cfg.include_label,
       excludeEntities: cfg.exclude_entities,
+      includeCovers: cfg.include_covers,
+      includeLocks: cfg.include_locks,
     });
     this._discoveredCount = ids.length;
   }
@@ -147,6 +159,8 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
       includeAreas: cfg.include_area,
       includeLabels: cfg.include_label,
       excludeEntities: cfg.exclude_entities,
+      includeCovers: cfg.include_covers,
+      includeLocks: cfg.include_locks,
     });
     const byEntity = new Map(this._entries.map((e) => [e.entity, e]));
     const entries = ids.map((id) => byEntity.get(id) ?? { entity: id });
@@ -161,9 +175,11 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
     const schema: SchemaEntry[] = [{ name: "auto_discover", selector: { boolean: {} } }];
     if (this._auto) {
       schema.push(
+        { name: "include_covers", selector: { boolean: {} } },
+        { name: "include_locks", selector: { boolean: {} } },
         { name: "include_area", selector: { area: { multiple: true } } },
         { name: "include_label", selector: { label: { multiple: true } } },
-        { name: "exclude_entities", selector: { entity: { ...SENSOR_SELECTOR.entity, multiple: true } } },
+        { name: "exclude_entities", selector: { entity: { ...OPENING_SELECTOR.entity, multiple: true } } },
       );
     }
     return schema;
@@ -171,7 +187,7 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
 
   private _entrySchema(): SchemaEntry[] {
     return [
-      { name: "entity", required: true, selector: SENSOR_SELECTOR },
+      { name: "entity", required: true, selector: OPENING_SELECTOR },
       { name: "name", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
       { name: "tap_action", selector: { ui_action: {} } },
@@ -182,6 +198,9 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
     const map: Record<string, TranslationKey> = {
       auto_discover: "editor_battery_auto_discover",
       include_area: "editor_battery_include_area",
+      include_covers: "editor_openings_include_covers",
+      include_locks: "editor_openings_include_locks",
+      show_open_controls: "editor_openings_show_open_controls",
       include_label: "editor_battery_include_label",
       exclude_entities: "editor_battery_exclude_entities",
       entity: "editor_entity",
@@ -274,6 +293,8 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
             ${this._form(
               {
                 auto_discover: auto,
+                include_covers: cfg.include_covers ?? true,
+                include_locks: cfg.include_locks ?? true,
                 include_area: cfg.include_area ?? [],
                 include_label: cfg.include_label ?? [],
                 exclude_entities: cfg.exclude_entities ?? [],
@@ -314,9 +335,15 @@ export class M3OpeningsCardEditor extends LitElement implements LovelaceCardEdit
         <ha-expansion-panel outlined .header=${this._t("editor_supply_display")}>
           <ha-icon slot="leading-icon" icon="mdi:view-dashboard-outline"></ha-icon>
           <div class="panel-content">
-            ${this._form({ title: cfg.title, icon: cfg.icon, max_chips: cfg.max_chips ?? DEFAULT_OPENINGS_MAX_CHIPS }, [
+            ${this._form({
+              title: cfg.title,
+              icon: cfg.icon,
+              max_chips: cfg.max_chips ?? DEFAULT_OPENINGS_MAX_CHIPS,
+              show_open_controls: cfg.show_open_controls ?? true,
+            }, [
               { name: "title", selector: { text: {} } },
               { name: "icon", selector: { icon: {} } },
+              { name: "show_open_controls", selector: { boolean: {} } },
               { name: "max_chips", selector: { number: { min: 0, max: 20, mode: "box" } } },
             ])}
           </div>

@@ -21,6 +21,8 @@ export interface ListRowParams {
   iconBackground: string;
   middle: TemplateResult;
   right?: TemplateResult;
+  /** The right slot includes its own control. Give the row a separate button. */
+  rightInteractive?: boolean;
   barFraction?: number;
   barColor?: string;
   onClick?: (e: Event) => void;
@@ -51,7 +53,8 @@ export function listRowSurface(host?: HTMLElement, override?: string): string {
 
 export function renderListRow(p: ListRowParams): TemplateResult {
   const barPct = p.barFraction !== undefined ? Math.max(0, Math.min(100, p.barFraction * 100)) : undefined;
-  const interactive = !!p.onClick;
+  const rowAction = p.rightInteractive ? p.onClick : undefined;
+  const interactive = !!p.onClick && !rowAction;
   return html`
     <div
       class="lr-row ${p.extraClass ?? ""}"
@@ -60,7 +63,7 @@ export function renderListRow(p: ListRowParams): TemplateResult {
       role=${interactive ? "button" : nothing}
       tabindex=${interactive ? "0" : nothing}
       aria-label=${interactive ? (p.label ?? p.key) : nothing}
-      @click=${p.onClick}
+      @click=${interactive ? p.onClick : nothing}
       @keydown=${interactive && p.onClick ? activateOnKey(p.onClick) : nothing}
     >
       ${barPct !== undefined
@@ -73,6 +76,9 @@ export function renderListRow(p: ListRowParams): TemplateResult {
         <ha-icon icon=${p.icon}></ha-icon>
       </div>
       <div class="lr-middle">${p.middle}</div>
+      ${rowAction
+        ? html`<button type="button" class="lr-action" aria-label=${p.label ?? p.key} @click=${rowAction}></button>`
+        : nothing}
       ${p.right ? html`<div class="lr-right">${p.right}</div>` : nothing}
     </div>
   `;
@@ -208,6 +214,21 @@ export const listRowStyles = css`
     position: relative;
     flex: 1;
     min-width: 0;
+  }
+
+  .lr-action {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .lr-action:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
   }
 
   .lr-right {

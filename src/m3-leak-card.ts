@@ -10,6 +10,7 @@ import type {
 import {
   CARD_VERSION,
   DEFAULT_LEAK_RADIUS,
+  OPENINGS_ICON_TINT,
   DEFAULT_LEAK_ACCENT,
   DEFAULT_LEAK_ICON,
   LEAK_ALARM_COLOR,
@@ -30,9 +31,10 @@ import {
   resolveCornerRadius,
   NEW_CARD_ACCENT,
 } from "./const";
-import { resolveThemeColor, buildCssVars, resolveCommonColors , tintOn, foregroundOn, foregroundVars, tintBackground } from "./shared/color-config";
+import { resolveThemeColor, buildCssVars, resolveCommonColors , tintOn, foregroundOn } from "./shared/color-config";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { shouldAnimate, isReducedMotion } from "./shared/animation";
+import { cardHeaderStyles } from "./shared/card-header";
 import { renderListRow, listRowStyles , listRowSurface} from "./shared/list-row";
 import { formatSince } from "./shared/formatting";
 import { discoverLeakSensors } from "./shared/ha-registry";
@@ -420,9 +422,10 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
     const accent = this._config.accent_color ? resolveThemeColor(this._config.accent_color) : DEFAULT_LEAK_ACCENT;
 
     const bannerColor = state === "alarm" ? LEAK_ALARM_COLOR : state === "stale" ? LEAK_STALE_COLOR : accent;
+    const iconBg = tintOn(this, bannerColor, undefined, OPENINGS_ICON_TINT);
     const cssVars = buildCssVars({
-      "m3p-icon-color": bannerColor,
-      "m3p-icon-bg": tintBackground(bannerColor, undefined, 18),
+      "m3p-icon-color": foregroundOn(bannerColor, iconBg, 3, this),
+      "m3p-icon-bg": iconBg,
       "m3p-text": textColorCss,
       "m3p-secondary-text": secondaryTextColorCss,
       "leak-alarm": LEAK_ALARM_COLOR,
@@ -438,9 +441,6 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
       // the card they land at 4.46:1.
       "leak-alarm-fg": foregroundOn(LEAK_ALARM_COLOR, listRowSurface(this), 4.5),
       "leak-stale-fg": foregroundOn(LEAK_STALE_COLOR, listRowSurface(this), 4.5),
-      ...foregroundVars(this, {
-        "m3p-icon-color": bannerColor,
-      }),
     });
     const radius = resolveCornerRadius(this._config.radius ?? DEFAULT_LEAK_RADIUS, this._config.corners);
 
@@ -484,16 +484,27 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
           class="card-inner ${glassCardClass(this._config.glass_background)} state-${state} ${animate ? "" : "no-animations"}"
           style=${`border-radius: ${radius};${cardBackgroundCss ? ` background: ${cardBackgroundCss};` : ""}`}
         >
-          <div class="banner ${state}">
-            <div class="banner-icon ${state === "alarm" && animate ? "pulse" : ""}">
+          <div class="m3-header">
+            <div class="m3-icon-swatch ${state === "alarm" && animate ? "pulse" : ""}">
               <ha-icon icon=${bannerIcon}></ha-icon>
             </div>
-            <div class="banner-text">
-              <div class="banner-title">${title}</div>
-              <div class="banner-sub">${subtitle}</div>
+            <div class="m3-text-block">
+              <div class="m3-name">${title}</div>
+              <div class="m3-subtitle">${subtitle}</div>
             </div>
             ${state === "ok"
-              ? html`<div class="banner-right">${this._testDueChip()}${this._valveChip()}</div>`
+              ? html`<div class="banner-right">
+                  ${this._testDueChip()}${this._valveChip()}
+                  ${collapseOk
+                    ? html`<button
+                        type="button"
+                        class="header-toggle"
+                        aria-expanded=${String(this._expanded)}
+                        aria-label=${this._expanded ? this._t("leak_collapse") : this._t("leak_expand").replace("{n}", String(rows.length))}
+                        @click=${() => (this._expanded = !this._expanded)}
+                      ><ha-icon icon=${this._expanded ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon></button>`
+                    : nothing}
+                </div>`
               : nothing}
           </div>
 
@@ -520,14 +531,6 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
                   </button>
                 </div>
               `
-            : nothing}
-
-          ${collapseOk
-            ? html`<button class="collapse-toggle" @click=${() => (this._expanded = !this._expanded)}>
-                <ha-icon icon="mdi:water-check-outline"></ha-icon>
-                <span>${this._expanded ? this._t("leak_collapse") : this._t("leak_expand").replace("{n}", String(rows.length))}</span>
-                <ha-icon class="chevron ${this._expanded ? "open" : ""}" icon="mdi:chevron-down"></ha-icon>
-              </button>`
             : nothing}
 
           ${showList && (!collapseOk || this._expanded)
@@ -558,63 +561,45 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
 
   static styles = [
     glassCardStyles,
+    cardHeaderStyles,
     listRowStyles,
     css`
+      .card-inner {
+        gap: var(--m3-card-gap, 12px);
+      }
+
       .card-inner.state-alarm {
         background: color-mix(in srgb, var(--leak-alarm) 9%, var(--ha-card-background, var(--card-background-color)));
         border-color: color-mix(in srgb, var(--leak-alarm) 40%, var(--ha-card-background, var(--card-background-color)));
       }
 
-      .banner {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 13px;
-        border-radius: 22px;
-        background: color-mix(in srgb, var(--m3p-icon-color) 14%, var(--ha-card-background, var(--card-background-color)));
+      .m3-header {
+        cursor: default;
       }
-      .banner.alarm {
-        background: color-mix(in srgb, var(--leak-alarm) 20%, var(--ha-card-background, var(--card-background-color)));
+
+      .header-toggle {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
+        cursor: pointer;
       }
-      .banner-icon {
-        flex-shrink: 0;
-        width: 48px;
-        height: 48px;
-        border-radius: 17px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: color-mix(in srgb, var(--m3p-icon-color) 22%, var(--ha-card-background, var(--card-background-color)));
-        color: var(--m3p-icon-color-fg, var(--m3p-icon-color));
-      }
-      .banner-icon ha-icon {
-        --mdc-icon-size: 26px;
-      }
-      .banner-icon.pulse {
+
+      .m3-icon-swatch.pulse {
         animation: leak-pulse 1.6s ease-in-out infinite;
       }
       @keyframes leak-pulse {
         0%, 100% { transform: scale(1); opacity: 1; }
         50% { transform: scale(1.12); opacity: 0.7; }
       }
-      .banner-text {
-        flex: 1;
-        min-width: 0;
-      }
-      .banner-title {
-        font-size: 15px;
-        font-weight: 700;
-        color: var(--m3p-text);
-      }
-      .banner.alarm .banner-title {
-        font-size: 17px;
+      .state-alarm .m3-name {
         color: var(--leak-alarm-fg, var(--leak-alarm));
       }
-      .banner-sub {
-        font-size: 12px;
-        opacity: 0.7;
-        color: var(--m3p-secondary-text);
-      }
+
       .banner-right {
         display: flex;
         align-items: center;
@@ -783,7 +768,7 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
       .collapse-toggle .chevron.open {
         transform: rotate(180deg);
       }
-      .no-animations .banner-icon.pulse {
+      .no-animations .m3-icon-swatch.pulse {
         animation: none;
       }
 
@@ -796,15 +781,6 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
          up. Backticks are not allowed in here: this is a css template literal. */
       @supports not (color: color-mix(in srgb, red 50%, blue)) {
         .card-inner.state-alarm {
-          background: var(--ha-card-background, var(--card-background-color));
-        }
-        .banner {
-          background: var(--ha-card-background, var(--card-background-color));
-        }
-        .banner.alarm {
-          background: var(--ha-card-background, var(--card-background-color));
-        }
-        .banner-icon {
           background: var(--ha-card-background, var(--card-background-color));
         }
         .valve-chip.open {

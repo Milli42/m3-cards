@@ -6,6 +6,7 @@ import {
   discoverLeakSensors,
   discoverLightRooms,
   discoverOccupancyRooms,
+  discoverOpeningEntities,
   discoverPersonEntities,
   isHiddenEntity,
 } from "./ha-registry";
@@ -39,6 +40,42 @@ function hassFromFixture(fixture: RegistryFixture): HomeAssistant {
     },
   } as unknown as HomeAssistant;
 }
+
+describe("discoverOpeningEntities", () => {
+  const hass = hassFromFixture({
+    states: {
+      "binary_sensor.garage": { state: "off", attributes: { device_class: "garage_door" } },
+      "cover.garage": { state: "closed", attributes: { device_class: "garage" } },
+      "cover.gate": { state: "closed", attributes: { device_class: "gate" } },
+      "cover.door": { state: "closed", attributes: { device_class: "door" } },
+      "cover.shade": { state: "closed", attributes: { device_class: "shade" } },
+      "cover.unclassified": { state: "closed" },
+      "lock.front": { state: "locked" },
+    },
+    entities: [
+      { entity_id: "binary_sensor.garage", device_id: "garage", labels: ["entry"] },
+      { entity_id: "cover.garage", device_id: "garage", labels: ["entry"] },
+      { entity_id: "lock.front", area_id: "outside", labels: ["entry"] },
+    ],
+    devices: [{ id: "garage", area_id: "outside" }],
+  });
+
+  it("discovers eligible covers and locks and deduplicates by device", async () => {
+    expect(await discoverOpeningEntities(hass, {})).toEqual(["cover.garage", "cover.gate", "cover.door", "lock.front"]);
+  });
+
+  it("applies filters before deciding whether a cover replaces its sensor", async () => {
+    expect(await discoverOpeningEntities(hass, {
+      includeAreas: ["outside"],
+      includeLabels: ["entry"],
+      excludeEntities: ["cover.garage"],
+    })).toEqual(["binary_sensor.garage", "lock.front"]);
+  });
+
+  it("lets each new discovery category be disabled", async () => {
+    expect(await discoverOpeningEntities(hass, { includeCovers: false, includeLocks: false })).toEqual(["binary_sensor.garage"]);
+  });
+});
 
 describe("discoverLightRooms", () => {
   it("groups lights by area and names/icons the room from the area registry", async () => {

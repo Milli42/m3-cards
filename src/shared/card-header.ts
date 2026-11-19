@@ -9,6 +9,8 @@ export function renderCardHeader(params: {
   name: string;
   /** Text, or a template when the line carries icons (power summary, compact). */
   subtitle: string | TemplateResult;
+  expanded?: boolean;
+  label?: string;
   onClick?: (e: Event) => void;
   /**
    * Gives the icon swatch its own action, separate from the rest of the header
@@ -47,7 +49,8 @@ export function renderCardHeader(params: {
       class="m3-header"
       role=${interactive ? "button" : nothing}
       tabindex=${interactive ? "0" : nothing}
-      aria-label=${interactive ? params.name : nothing}
+      aria-expanded=${params.expanded === undefined ? nothing : String(params.expanded)}
+      aria-label=${interactive ? (params.label ?? params.name) : nothing}
       @click=${params.onClick}
       @keydown=${interactive && params.onClick ? activateOnKey(params.onClick) : nothing}
     >

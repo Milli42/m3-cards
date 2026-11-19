@@ -10,8 +10,7 @@ import type {
 import {
   ALARM_ERROR_COLOR,
   ALARM_FOLD_MS,
-  ALARM_HEADER_ICON,
-  ALARM_HEADER_ICON_RADIUS,
+  APPLIANCE_PILL_HEIGHT,
   ALARM_ICON_TINT,
   ALARM_MODE_GAP,
   ALARM_MODE_HEIGHT,
@@ -41,6 +40,7 @@ import {
 } from "./shared/color-config";
 import { glassCardClass, glassCardStyles, renderMissingEntity } from "./shared/glass-card";
 import { hassChangeMatters } from "./shared/should-update";
+import { cardHeaderStyles } from "./shared/card-header";
 import { activateOnKey } from "./shared/a11y";
 import { openEntityDetail } from "./shared/entity-detail";
 import { TemplatedCard } from "./shared/templated-card";
@@ -111,11 +111,15 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
 
   public setConfig(config: M3AlarmCardConfig): void {
     if (!config?.entity) throw new Error("m3-alarm-card: 'entity' is required");
+    if (this._config?.entity !== config.entity) {
+      this._expanded = false;
+      this._entry = undefined;
+    }
     this._config = { glass_background: true, animation: "auto", ...config };
   }
 
   public getCardSize(): number {
-    return this._config?.compact ? 1 : 3;
+    return this._collapsible && !this._expanded ? 1 : 3;
   }
 
   public getGridOptions(): LovelaceGridOptions {
@@ -146,26 +150,30 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
     const phase = this._phase;
     // A second tick only while something counts down; the minute otherwise.
     this._ticker.setCadence(phase === "arming" || phase === "pending" ? "second" : "minute");
-    if (changed.has("hass")) {
-      const before = (changed.get("hass") as HomeAssistant | undefined)?.states[this._config?.entity ?? ""]?.state;
+    if (changed.has("hass") || changed.has("_config")) {
+      const oldConfig = changed.get("_config") as M3AlarmCardConfig | undefined;
+      const switchedPanel = changed.has("_config") && oldConfig?.entity !== this._config?.entity;
+      const previous = changed.get("hass") as HomeAssistant | undefined;
+      const before = switchedPanel ? undefined : previous?.states[this._config?.entity ?? ""]?.state;
       const now = this._entity?.state;
-      if (before !== now) this._onStateChange(alarmPhase(before), phase);
+      if ((switchedPanel || changed.has("hass")) && before !== now) this._onStateChange(alarmPhase(before), phase);
     }
   }
 
-  /**
-   * An entry delay or a triggered alarm opens the code entry by itself (it is
-   * what the next tap would be for anyway). A state reached from elsewhere —
-   * an automation, the panel by the door — closes a code entry that no longer
-   * fits: a disarm code is pointless once the panel is disarmed.
-   */
   private _onStateChange(before: AlarmPhase, after: AlarmPhase): void {
-    if (after === "pending" && codeNeeded(this._entity, "disarm")) {
-      this._entry = { target: "disarmed", code: "", shake: 0 };
+    if (before === after) return;
+    if (after === "disarmed" || after === "unavailable") this._expanded = false;
+    if (after === "disarmed" || after === "arming" || after === "disarming" || after === "unavailable") this._entry = undefined;
+    if (after === "armed" || after === "pending" || after === "triggered") {
+      if (this._entry?.target === "disarmed" && codeNeeded(this._entity, "disarm")) return;
+      this._entry = codeNeeded(this._entity, "disarm") ? { target: "disarmed", code: "", shake: 0 } : undefined;
     }
-    if (after === "pending" || after === "triggered") this._expanded = true;
-    if (this._entry?.target === "disarmed" && (after === "disarmed" || after === "disarming")) this._entry = undefined;
-    if (before !== after && after === "unavailable") this._entry = undefined;
+  }
+
+  private get _collapsible(): boolean {
+    const phase = this._phase;
+    if (phase === "disarmed") return this._config?.collapse_disarmed !== false;
+    return !!this._config?.compact && (phase === "unavailable" || phase === "disarming");
   }
 
   private get _entity() {
@@ -272,8 +280,9 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
   };
 
   private _onHeader = (): void => {
-    if (this._config?.compact) {
+    if (this._collapsible) {
       this._expanded = !this._expanded;
+      if (!this._expanded) this._entry = undefined;
       return;
     }
     openEntityDetail(this, this._config?.entity);
@@ -322,8 +331,8 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
     const cssVars = buildCssVars({
       "m3p-text": textColorCss,
       "m3p-secondary-text": secondaryTextColorCss,
-      "alarm-icon-bg": iconBg,
-      "alarm-icon-ink": foregroundOn(color, iconBg, 3, this),
+      "m3p-icon-bg": iconBg,
+      "m3p-icon-color": foregroundOn(color, iconBg, 3, this),
       "alarm-pill-bg": pillBg,
       "alarm-pill-ink": foregroundOn(color, pillBg, 4.5, this),
       "alarm-bar": fillColor(this, color),
@@ -346,8 +355,8 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
     const name = cfg.name ?? (entity.attributes.friendly_name as string | undefined) ?? this._t("alarm_default_name");
     const { title, subtitle, icon } = this._headline(phase, mode, since, name, entity);
     const unavailable = phase === "unavailable";
-    const compact = !!cfg.compact;
-    const open = !compact || this._expanded || phase === "pending" || phase === "triggered" || !!this._entry;
+    const collapsible = this._collapsible;
+    const open = !collapsible || this._expanded;
     const animate = shouldAnimate(cfg.animation);
 
     return html`
@@ -358,22 +367,25 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
         >
           <span class="sr-only" aria-live=${phase === "triggered" || phase === "pending" ? "assertive" : "polite"}>${title}</span>
           <div
-            class="header"
+            class="m3-header"
             role="button"
             tabindex="0"
-            aria-label=${name}
-            aria-expanded=${compact ? String(open) : nothing}
+            aria-label=${`${name}: ${title}`}
+            aria-expanded=${collapsible ? String(open) : nothing}
             @click=${this._onHeader}
             @keydown=${activateOnKey(this._onHeader)}
           >
-            <div class="squircle ${phase === "arming" || phase === "pending" || phase === "triggered" ? "pulse" : ""}">
+            <div class="m3-icon-swatch ${phase === "arming" || phase === "pending" || phase === "triggered" ? "pulse" : ""}">
               <ha-icon icon=${icon}></ha-icon>
             </div>
-            <div class="text">
-              <div class="title">${title}</div>
-              ${subtitle ? html`<div class="subtitle">${subtitle}</div>` : nothing}
+            <div class="m3-text-block">
+              <div class="m3-name">${title}</div>
+              ${subtitle ? html`<div class="m3-subtitle">${subtitle}</div>` : nothing}
             </div>
             ${this._renderPill(phase, left)}
+            ${collapsible
+              ? html`<ha-icon class="header-chevron" icon=${open ? "mdi:chevron-up" : "mdi:chevron-down"} aria-hidden="true"></ha-icon>`
+              : nothing}
           </div>
           ${phase === "arming" || phase === "pending"
             ? html`<div class="bar" role="progressbar" aria-label=${title}>
@@ -442,7 +454,7 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
     const cfg = this._config!;
     const showSensors = cfg.show_sensors !== false && (phase === "disarmed" || phase === "arming");
     return html`
-      ${phase === "triggered" && !entry
+      ${(phase === "triggered" || phase === "pending") && !entry
         ? html`<button class="disarm-now" ?disabled=${this._busy} @click=${this._disarmFromTriggered}>
             <ha-icon icon="mdi:shield-off-outline"></ha-icon>${this._t("alarm_disarm_now")}
           </button>`
@@ -524,6 +536,7 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
 
   static styles = [
     glassCardStyles,
+    cardHeaderStyles,
     keypadStyles,
     css`
       .sr-only {
@@ -536,44 +549,22 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
       }
 
       .card-inner {
+        gap: var(--m3-card-gap, 12px);
         transition: background-color 300ms ${EASING}, border-color 300ms ${EASING};
       }
 
       .card-inner.unavailable .modes,
-      .card-inner.unavailable .squircle {
+      .card-inner.unavailable .m3-icon-swatch {
         opacity: 0.5;
       }
 
-      /* ---- header ---- */
-      .header {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        min-width: 0;
-        cursor: pointer;
-        border-radius: 16px;
-      }
-
-      .header:focus-visible {
-        outline: 2px solid var(--alarm-accent-fg);
-        outline-offset: 2px;
-      }
-
-      .squircle {
+      .header-chevron {
+        --mdc-icon-size: 18px;
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
         flex-shrink: 0;
-        width: ${unsafeCSS(ALARM_HEADER_ICON)}px;
-        height: ${unsafeCSS(ALARM_HEADER_ICON)}px;
-        border-radius: ${unsafeCSS(ALARM_HEADER_ICON_RADIUS)}px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--alarm-icon-bg);
-        color: var(--alarm-icon-ink);
-        --mdc-icon-size: 28px;
-        transition: background-color 300ms ${EASING}, color 300ms ${EASING};
       }
 
-      .squircle.pulse {
+      .m3-icon-swatch.pulse {
         animation: alarm-pulse ${unsafeCSS(ALARM_PULSE_MS)}ms ${EASING} infinite;
       }
 
@@ -587,47 +578,22 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
         }
       }
 
-      .text {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-
-      .title {
-        font-size: 18px;
-        font-weight: 700;
-        line-height: 1.2;
-        color: var(--m3p-text, var(--primary-text-color));
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .phase-triggered .title {
+      .phase-triggered .m3-name {
         color: var(--alarm-error-fg);
-      }
-
-      .subtitle {
-        font-size: 13px;
-        color: var(--m3p-secondary-text, var(--secondary-text-color));
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
 
       .pill {
         flex-shrink: 0;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        height: 32px;
-        padding: 0 14px;
-        border-radius: 16px;
+        gap: 4px;
+        height: ${unsafeCSS(APPLIANCE_PILL_HEIGHT)}px;
+        padding: 0 10px 0 8px;
+        border-radius: ${unsafeCSS(APPLIANCE_PILL_HEIGHT / 2)}px;
+        line-height: 1;
         background: var(--alarm-pill-bg);
         color: var(--alarm-pill-ink);
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         --mdc-icon-size: 16px;
       }
@@ -744,7 +710,7 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
       }
 
       .phase-disarmed .mode.active {
-        background: var(--alarm-icon-bg);
+        background: var(--m3p-icon-bg);
         color: var(--m3p-text, var(--primary-text-color));
       }
 
@@ -839,7 +805,7 @@ export class M3AlarmCard extends TemplatedCard(LitElement) implements LovelaceCa
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .squircle.pulse,
+        .m3-icon-swatch.pulse,
         .bar-fill.indeterminate {
           animation: none;
         }
