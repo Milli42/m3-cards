@@ -6,6 +6,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.15.1] – 2026-11-19
+
+### Changed
+
+- **Lights Overview** matches the fan speed slider to the fan tile's off tint
+  when the fan is off. Active sliders use `fan_color` with a translucent track.
+
 ## [2.15.0] – 2026-11-19
 
 ### Changed
