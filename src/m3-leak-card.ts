@@ -40,6 +40,7 @@ import { localize, type TranslationKey } from "./localize";
 import { lastSeen, deviceSiblings } from "./shared/last-seen";
 import { discoveryChangeMatters } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
+import { leakRowList } from "./shared/leak-rows";
 import { openEntityDetail } from "./shared/entity-detail";
 
 console.info(
@@ -474,15 +475,7 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
         .replace("{t}", newest ? this._since(new Date(newest).toISOString()) : "—");
     }
 
-    const collapseOk = this._config.collapse_ok === true && state === "ok";
-
-    // A long list of quiet sensors is worth keeping short. An alarm is not:
-    // whichever sensor is wet must be on screen without another tap, so the
-    // limit is dropped as soon as anything is wrong.
-    const maxVisible = state === "alarm" ? 0 : (this._config.max_visible ?? 0);
-    const visibleRows =
-      maxVisible > 0 && !this._showAll ? rows.slice(0, maxVisible) : rows;
-    const hiddenCount = maxVisible > 0 ? Math.max(0, rows.length - maxVisible) : 0;
+    const { collapseOk, visibleRows, hiddenCount, showList } = leakRowList(rows, this._config, state, this._showAll);
     const showShutoff = state === "alarm" && !!this._config.valve_entity;
 
     return html`
@@ -537,7 +530,7 @@ export class M3LeakCard extends TemplatedCard(LitElement) implements LovelaceCar
               </button>`
             : nothing}
 
-          ${!collapseOk || this._expanded
+          ${showList && (!collapseOk || this._expanded)
             ? html`
                 <div class="row-list">${visibleRows.map((r) => this._renderRow(r))}</div>
                 ${hiddenCount > 0

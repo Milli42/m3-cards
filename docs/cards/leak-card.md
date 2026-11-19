@@ -25,9 +25,13 @@ valve_entity: valve.main_water        # optional: valve / switch / cover
 # siren_entity: siren.alarm           # optional, for the acknowledge button
 ```
 
-`max_visible` keeps the list short: the first few sensors are shown and the
-rest sit behind a "show N more" toggle. It steps aside during an alarm —
-whichever sensor is wet has to be on screen without another tap.
+By default, `show_only_wet` shows every wet sensor during an alarm. When no
+sensor is wet, the card shows the banner and its chips only. The banner still
+reflects the full sensor set.
+
+Set `show_only_wet: false` to list dry and offline sensors as well.
+`collapse_ok` folds that list while all sensors are OK. `max_visible` puts
+extra rows behind a "show N more" toggle and shows the full list during an alarm.
 
 ### Configuration options
 
@@ -43,6 +47,7 @@ whichever sensor is wet has to be on screen without another tap.
 | `stale_hours` | number | `24` | How long a silence lasts before `stale_check` counts it |
 | `battery_warn` / `battery_critical` | number | `40` / `20` | Battery chip thresholds |
 | `test_interval_days` | number | `0` | Show a "test due" chip after N days (with `last_test_entity`) |
+| `show_only_wet` | boolean | `true` | Show only wet sensor rows and hide the list when none are wet |
 | `max_visible` | number | – | Show only this many sensors, the rest behind a toggle |
 | `collapse_ok` | boolean | `false` | Collapse the list while all dry |
 | `notify_service` / `notify_enabled` | – | – | Optional push on water detection (off by default) |

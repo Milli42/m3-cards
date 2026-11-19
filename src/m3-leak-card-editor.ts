@@ -127,6 +127,7 @@ export class M3LeakCardEditor extends LitElement implements LovelaceCardEditor {
     return [
       { name: "name", selector: { text: {} } },
       { name: "icon", selector: { icon: {} } },
+      { name: "show_only_wet", selector: { boolean: {} } },
       { name: "collapse_ok", selector: { boolean: {} } },
       { name: "max_visible", selector: { number: { min: 0, max: 30, mode: "box" } } },
     ];
@@ -256,6 +257,7 @@ export class M3LeakCardEditor extends LitElement implements LovelaceCardEditor {
       battery_critical: "editor_leak_battery_critical",
       test_interval_days: "editor_leak_test_interval",
       last_test_entity: "editor_leak_last_test",
+      show_only_wet: "editor_leak_show_only_wet",
       collapse_ok: "editor_leak_collapse_ok",
       max_visible: "editor_leak_max_visible",
       animation: "editor_progress_animation",
@@ -352,6 +354,7 @@ export class M3LeakCardEditor extends LitElement implements LovelaceCardEditor {
     const displayData = {
       name: this._config.name,
       icon: this._config.icon,
+      show_only_wet: this._config.show_only_wet ?? true,
       collapse_ok: this._config.collapse_ok ?? false,
       max_visible: this._config.max_visible ?? 0,
     };

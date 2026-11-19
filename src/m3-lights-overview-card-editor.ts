@@ -172,6 +172,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       { name: "show_count", selector: { boolean: {} } },
       { name: "shape_by_state", selector: { boolean: {} } },
       { name: "show_area", selector: { boolean: {} } },
+      { name: "show_brightness_slider", selector: { boolean: {} } },
       { name: "hide_empty_rooms", selector: { boolean: {} } },
     ];
   }
@@ -210,6 +211,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     return [
       { name: "title", selector: { text: {} } },
       { name: "inherit_filters", selector: { boolean: {} } },
+      { name: "show_brightness_slider", selector: { boolean: {} } },
       { name: "exclude_labels", selector: { label: { multiple: true } } },
       { name: "exclude_entities", selector: { entity: { domain: "light", multiple: true } } },
       { name: "group_handling", selector: this._groupHandlingSelector() },
@@ -258,6 +260,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       show_header: "editor_show_header",
       show_count: "editor_lights_show_count",
       show_area: "editor_lights_show_area",
+      show_brightness_slider: "editor_lights_show_brightness_slider",
       hide_empty_rooms: "editor_lights_hide_empty_rooms",
       exclude_toggle_entities: "editor_lights_exclude_toggle",
       toggle_inherit_filters: "editor_lights_toggle_inherit",
@@ -450,6 +453,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       show_count: cfg.show_count ?? true,
       shape_by_state: cfg.shape_by_state ?? false,
       show_area: cfg.show_area ?? true,
+      show_brightness_slider: cfg.show_brightness_slider ?? false,
       hide_empty_rooms: cfg.hide_empty_rooms ?? false,
     };
 
@@ -472,6 +476,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     const popupData = {
       title: popup.title ?? "",
       inherit_filters: popup.inherit_filters ?? true,
+      show_brightness_slider: popup.show_brightness_slider ?? true,
       exclude_labels: popup.exclude_labels ?? [],
       exclude_entities: popup.exclude_entities ?? [],
       group_handling: popup.group_handling ?? cfg.group_handling ?? "all",

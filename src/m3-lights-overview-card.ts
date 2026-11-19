@@ -1,7 +1,9 @@
 import { LitElement, html, css, nothing, unsafeCSS, type PropertyValues } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
 import type {
   HomeAssistant,
+  HassEntity,
   M3LightsOverviewCardConfig,
   LightsOverviewPopupMode,
   HaActionConfig,
@@ -22,6 +24,7 @@ import {
   resolveCornerRadius,
   SHAPE_OFF_TILE_RADIUS,
   BUTTON_SHAPE_MS,
+  LIGHT_THROTTLE_MS,
 } from "./const";
 import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, foregroundOn } from "./shared/color-config";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
@@ -51,6 +54,10 @@ import { discoveryChangeMatters } from "./shared/should-update";
 import { localize, type TranslationKey } from "./localize";
 import { TemplatedCard } from "./shared/templated-card";
 import { openEntityDetail } from "./shared/entity-detail";
+import { DragThrottle } from "./shared/drag-throttle";
+import { clampLightBrightnessPercent, isDimmableLight, lightBrightnessPercent } from "./shared/light-brightness";
+import { capturePointer, sliderPointer, SLIDER_TOUCH_ACTION } from "./shared/slider-intent";
+import { stopSwipe } from "./shared/swipe";
 
 console.info(
   `%c M3-LIGHTS-OVERVIEW-CARD %c v${CARD_VERSION} `,
@@ -109,6 +116,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   private _popupCardEl?: HTMLElement & PopupCardHandle;
   private _popupCardKey?: string;
   private _detailCard = new DetailCardController();
+  private readonly _brightnessDrags = new Map<string, { slider: HTMLElement; value: number; throttle: DragThrottle<number> }>();
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import("./m3-lights-overview-card-editor");
@@ -146,6 +154,8 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
   public disconnectedCallback(): void {
     super.disconnectedCallback();
     this._gestures.cancel();
+    for (const drag of this._brightnessDrags.values()) drag.throttle.clear();
+    this._brightnessDrags.clear();
     this._closePopup();
   }
 
@@ -249,11 +259,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         const switchableSet = new Set(room.toggleEntities);
         return room.entities
           .filter((id) => !!hass.states[id])
-          .map((id): LightsOverviewTile => {
+          .map((id, index): LightsOverviewTile => {
             const st = hass.states[id];
             const on = st.state === "on";
             return {
-              key: `entity:${id}`,
+              key: `${room.key}:entity:${id}:${index}`,
               name: (st.attributes.friendly_name as string | undefined) ?? id,
               icon: (st.attributes.icon as string | undefined) ?? (on ? "mdi:lightbulb" : "mdi:lightbulb-outline"),
               entities: [id],
@@ -436,6 +446,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       group_handling: popup.group_handling ?? cfg.group_handling,
       toggle_group_handling: popup.toggle_group_handling ?? cfg.toggle_group_handling,
       show_area: popup.show_area ?? false,
+      show_brightness_slider: popup.show_brightness_slider ?? true,
       // The popup's header carries the room name, so it stays unless the
       // popup config says otherwise — inheriting a hidden header would leave
       // the dialog with nothing identifying it.
@@ -498,6 +509,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
   protected updated(changed: PropertyValues): void {
     super.updated(changed);
+    for (const [id, drag] of this._brightnessDrags) {
+      if (drag.slider.isConnected) continue;
+      drag.throttle.clear();
+      this._brightnessDrags.delete(id);
+    }
     this._maybeDiscover();
     if (this._popupCardEl && this.hass) this._popupCardEl.hass = this.hass;
     this._maybeSyncDetailCard();
@@ -557,7 +573,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
             ? html`<div class="empty-state">${this._t(emptyKey)}</div>`
             : html`
                 <div class="room-grid ${view === "entities" ? "entity-grid" : ""}">
-                  ${tiles.map((t) => this._renderTile(t, onColor, offColor))}
+                  ${view === "entities" && this._config.show_brightness_slider
+                    ? repeat(tiles, (tile) => tile.key, (tile) => this._renderTile(tile, onColor, offColor))
+                    : tiles.map((tile) => this._renderTile(tile, onColor, offColor))}
                 </div>
               `}
         </div>
@@ -582,7 +600,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     const stateLabel = on ? this._t("lights_overview_on") : this._t("lights_overview_off");
     const ariaLabel = `${tile.name}: ${stateLabel}`;
 
-    return html`
+    const body = html`
       <div
         class="room-tile ${tile.unavailable ? "unavailable" : ""} ${tile.switchable.length === 0
           ? "not-switchable"
@@ -622,6 +640,116 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
             : nothing}
       </div>
     `;
+    const entity = this._config?.view === "entities" && this._config.show_brightness_slider
+      ? this.hass?.states[tile.entities[0]]
+      : undefined;
+    if (!entity || !isDimmableLight(entity)) return body;
+
+    return html`
+      <div class="tile-with-slider" style=${`--tile-color: ${color};`}>
+        ${body}
+        ${this._renderBrightnessSlider(entity, tile.name, tile.unavailable)}
+      </div>
+    `;
+  }
+
+  private _setBrightness(entityId: string, percent: number): void {
+    const entity = this.hass?.states[entityId];
+    if (!entity || entity.state === "unavailable" || entity.state === "unknown") return;
+    this.hass?.callService("light", "turn_on", { brightness_pct: percent }, { entity_id: entityId });
+  }
+
+  private _renderBrightnessSlider(entity: HassEntity, name: string, unavailable: boolean) {
+    const id = entity.entity_id;
+    const percent = this._brightnessDrags.get(id)?.value ?? lightBrightnessPercent(entity);
+    const percentAt = (e: PointerEvent): number => {
+      const track = (e.currentTarget as HTMLElement).firstElementChild!;
+      const rect = track.getBoundingClientRect();
+      return clampLightBrightnessPercent(rect.width > 0 ? ((e.clientX - rect.left) / rect.width) * 100 : 0);
+    };
+    const pointer = sliderPointer({
+      down: (e) => {
+        if (unavailable || this._brightnessDrags.has(id)) return;
+        e.preventDefault();
+        const slider = e.currentTarget as HTMLElement;
+        slider.focus();
+        capturePointer(slider, e);
+        const value = percentAt(e);
+        const throttle = new DragThrottle<number>((pct) => this._setBrightness(id, pct), LIGHT_THROTTLE_MS);
+        this._brightnessDrags.set(id, { slider, value, throttle });
+        throttle.call(value);
+        this.requestUpdate();
+      },
+      move: (e) => {
+        const drag = this._brightnessDrags.get(id);
+        if (!drag || drag.slider !== e.currentTarget) return;
+        const value = percentAt(e);
+        if (value === drag.value) return;
+        drag.value = value;
+        drag.throttle.call(value);
+        this.requestUpdate();
+      },
+      up: (e) => {
+        const drag = this._brightnessDrags.get(id);
+        if (!drag || drag.slider !== e.currentTarget) return;
+        this._brightnessDrags.delete(id);
+        drag.throttle.flush(e.type === "pointerup" ? percentAt(e) : drag.value);
+        this.requestUpdate();
+      },
+    });
+    const onKey = (e: KeyboardEvent): void => {
+      const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 5
+        : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -5 : 0;
+      if (unavailable || step === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this._setBrightness(id, clampLightBrightnessPercent(percent + step));
+    };
+
+    return html`
+      <div
+        class="brightness-slider"
+        role="slider"
+        aria-label=${`${name}: ${this._t("light_brightness_label")}`}
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow=${percent}
+        aria-valuetext=${`${percent}%`}
+        aria-disabled=${unavailable ? "true" : "false"}
+        tabindex=${unavailable ? -1 : 0}
+        style=${`--brightness: ${percent}%;`}
+        @pointerdown=${(e: PointerEvent) => {
+          e.stopPropagation();
+          if (e.isPrimary && e.button === 0 && !unavailable) pointer.down(e);
+        }}
+        @pointermove=${(e: PointerEvent) => {
+          e.stopPropagation();
+          pointer.move(e);
+        }}
+        @pointerup=${(e: PointerEvent) => {
+          e.stopPropagation();
+          pointer.up(e);
+        }}
+        @pointercancel=${(e: PointerEvent) => {
+          e.stopPropagation();
+          pointer.cancel(e);
+        }}
+        @lostpointercapture=${pointer.cancel}
+        @click=${stopSwipe}
+        @contextmenu=${stopSwipe}
+        @touchstart=${stopSwipe}
+        @touchmove=${stopSwipe}
+        @touchend=${stopSwipe}
+        @touchcancel=${stopSwipe}
+        @mousedown=${stopSwipe}
+        @mousemove=${stopSwipe}
+        @mouseup=${stopSwipe}
+        @keydown=${onKey}
+      >
+        <div class="brightness-track"></div>
+        <span class="brightness-value" aria-hidden="true">${percent}%</span>
+      </div>
+    `;
   }
 
   static styles = [
@@ -637,6 +765,60 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
       .entity-grid {
         grid-template-columns: repeat(auto-fit, minmax(${LIGHTS_OVERVIEW_ENTITY_GRID_MIN_COL}px, 1fr));
+      }
+
+      .tile-with-slider {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .tile-with-slider .room-tile {
+        flex: 1;
+      }
+
+      .brightness-slider {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 24px;
+        border-radius: 999px;
+        cursor: ew-resize;
+        touch-action: ${unsafeCSS(SLIDER_TOUCH_ACTION)};
+      }
+
+      .brightness-slider[aria-disabled="true"] {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .brightness-slider:focus-visible {
+        outline: 2px solid var(--tile-color);
+      }
+
+      .brightness-value {
+        min-width: 4ch;
+        color: var(--m3p-secondary-text);
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+        text-align: end;
+      }
+
+      .brightness-track {
+        flex: 1;
+        height: 8px;
+        overflow: hidden;
+        border-radius: inherit;
+        background: color-mix(in srgb, var(--tile-color) 20%, transparent);
+      }
+
+      .brightness-track::before {
+        content: "";
+        display: block;
+        width: var(--brightness);
+        height: 100%;
+        border-radius: inherit;
+        background: var(--tile-color);
       }
 
       .room-tile {

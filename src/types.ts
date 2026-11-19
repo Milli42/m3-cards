@@ -2063,6 +2063,8 @@ export interface M3LeakCardConfig extends NotifyConfigBase, DetailModeConfig {
   battery_critical?: number;
   test_interval_days?: number;
   last_test_entity?: string;
+  /** Show only wet sensors in the list. Defaults to true. */
+  show_only_wet?: boolean;
   collapse_ok?: boolean;
   /** Show only this many sensors, the rest behind a toggle. 0 or unset shows all. */
   max_visible?: number;
@@ -3418,6 +3420,7 @@ export interface LightsOverviewManualRoomConfig {
 export type LightsOverviewPopupMode = "default-detail" | "default-grid" | "custom";
 
 export interface LightsOverviewPopupConfig extends EntityFilterConfig {
+  show_brightness_slider?: boolean;
   mode?: LightsOverviewPopupMode;
   title?: string;
   inherit_filters?: boolean;
@@ -3461,6 +3464,8 @@ export interface M3LightsOverviewCardConfig extends EntityFilterConfig, DetailMo
   tap_action?: HaActionConfig;
   hold_action?: HaActionConfig;
   double_tap_action?: HaActionConfig;
+  /** Show brightness sliders in the entities view. Defaults to false. */
+  show_brightness_slider?: boolean;
   popup?: LightsOverviewPopupConfig;
   on_color?: string;
   off_color?: string;
