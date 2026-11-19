@@ -10,7 +10,7 @@ import {
   LEVEL_TRACK_RADIUS,
 } from "./shared/level-slider";
 
-export const CARD_VERSION = "2.14.0";
+export const CARD_VERSION = "2.15.0";
 
 export const DEFAULT_CLIMATE_RADIUS = RADIUS.cardHero;
 export const DEFAULT_MINI_RADIUS = RADIUS.card;
@@ -3328,14 +3328,6 @@ export const AVAILABILITY_OK_COLOR = PALETTE.ok;
 export const DEFAULT_AVAILABILITY_RECENT_MINUTES = 60;
 export const DEFAULT_AVAILABILITY_CRITICAL_HOURS = 24;
 export const DEFAULT_AVAILABILITY_MAX_ITEMS = 10;
-export const AVAILABILITY_ROW_HEIGHT = 60;
-export const AVAILABILITY_ROW_RADIUS = RADIUS.row;
-export const AVAILABILITY_ROW_RADIUS_ACTIVE = RADIUS.rowActive;
-export const AVAILABILITY_ICON_SIZE = 40;
-export const AVAILABILITY_ICON_RADIUS = 14;
-export const AVAILABILITY_HEADER_ICON = 44;
-export const AVAILABILITY_HEADER_RADIUS = RADIUS.squircle44;
-export const AVAILABILITY_ROW_GAP = SPACING.rowGap;
 export const AVAILABILITY_TICK_MS = 60_000;
 /** How far back the history is read to see an outage through restarts. */
 export const AVAILABILITY_HISTORY_DAYS = 30;

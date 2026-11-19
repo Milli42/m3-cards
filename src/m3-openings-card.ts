@@ -21,17 +21,9 @@ import {
   OPENINGS_COLOR_MISSING,
   OPENINGS_COLOR_OPEN,
   OPENINGS_COLOR_WARN,
-  OPENINGS_GROUP_GAP,
-  OPENINGS_GROUP_RADIUS_INNER,
-  OPENINGS_GROUP_RADIUS_OUTER,
-  OPENINGS_GROUP_RADIUS_PRESSED,
-  OPENINGS_HERO_SIZE,
   OPENINGS_HISTORY_DAYS,
   OPENINGS_MOTION,
-  OPENINGS_ICON_RADIUS,
-  OPENINGS_ICON_SIZE,
   OPENINGS_ICON_TINT,
-  OPENINGS_ROW_HEIGHT,
   OPENINGS_ROW_TINT,
   STATUS_PILL_TINT,
   APPLIANCE_PILL_HEIGHT,
@@ -44,6 +36,7 @@ import { activateOnKey } from "./shared/a11y";
 import { buildCssVars, foregroundColor, foregroundOn, resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
 import { glassCardClass, glassCardStyles } from "./shared/glass-card";
 import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
+import { compactStatusStyles } from "./shared/compact-status";
 import { listRowStyles, renderListRow } from "./shared/list-row";
 import { discoveryChangeMatters, hassChangeMatters } from "./shared/should-update";
 import { runHaAction } from "./shared/actions";
@@ -347,7 +340,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
     const label = this._t(`openings_action_${service}`);
     return html`<button
       type="button"
-      class="device-action"
+      class="device-action compact-action"
       aria-label=${`${label}: ${row.name}`}
       aria-busy=${String(busy)}
       ?disabled=${busy}
@@ -428,12 +421,6 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       "op-chip-ok-bg": chipOkBg,
       "op-chip-ok-ink": foregroundOn(colorClosed, chipOkBg, 4.5, this),
       "op-chip-missing-bg": chipMissingBg,
-      "lr-row-height": `${OPENINGS_ROW_HEIGHT}px`,
-      "lr-row-radius": `${OPENINGS_GROUP_RADIUS_INNER}px`,
-      "lr-row-radius-active": `${OPENINGS_GROUP_RADIUS_PRESSED}px`,
-      "lr-icon-size": `${OPENINGS_ICON_SIZE}px`,
-      "lr-icon-radius": `${OPENINGS_ICON_RADIUS}px`,
-      "lr-row-gap": `${OPENINGS_GROUP_GAP}px`,
     });
     const radius = resolveCornerRadius(cfg.radius ?? DEFAULT_OPENINGS_RADIUS, cfg.corners);
     const title = cfg.title ?? this._t("openings_title");
@@ -455,7 +442,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
           })}
           ${this._renderOpen(open, colorOpen)}
           ${canExpand && this._controlsOpen ? this._renderSecureControls(devices, colorClosed) : nothing}
-          ${summary === "clear" ? nothing : this._renderChips(missing, closed)}
+          ${summary === "incomplete" ? this._renderChips(missing, closed) : nothing}
         </div>
       </ha-card>
     `;
@@ -490,7 +477,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
 
   private _headerRight(summary: Summary, openCount: number, secure: boolean, canExpand: boolean) {
     if (summary === "open") {
-      return html`<div class="hero" data-motion-key="hero" aria-label=${`${openCount} ${this._t("openings_open_label")}`}>
+      return html`<div class="hero hero-line" data-motion-key="hero" aria-label=${`${openCount} ${this._t("openings_open_label")}`}>
         <span class="hero-n" data-motion-key="hero-n" data-motion-count>${openCount}</span><span class="hero-l">${this._t("openings_open_label")}</span>
       </div>`;
     }
@@ -542,7 +529,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
     const cfg = this._config!;
     const outdoor = this._outdoor();
     return html`
-      <div class="row-list open-group" role="list">
+      <div class="row-list compact-rows" role="list">
         ${open.map((row) => {
           const { text, minutes } = this._openFor(row);
           const sensor = openingKind(row.entry.entity) === "sensor";
@@ -569,8 +556,8 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
             extraClass: warn.highlight ? "warn" : "",
             onClick: () => this._tap(row.entry),
             middle: html`
-              <div class="op-name">${row.name}</div>
-              <div class="op-sub ${warn.highlight ? "warn" : ""}">${text}</div>
+              <div class="compact-row-name">${row.name}</div>
+              <div class="compact-row-sub ${warn.highlight ? "warn" : ""}">${text}</div>
             `,
             rightInteractive: !!action,
             right: action || pillLabel ? html`<div class="row-end">
@@ -586,7 +573,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
   }
 
   private _renderSecureControls(rows: OpeningRow[], color: string) {
-    return html`<div class="row-list open-group">
+    return html`<div class="row-list compact-rows">
       ${rows.map((row) => {
         const state = row.entity?.state;
         const text = this._t(state === "locking" ? "openings_state_locking" : state === "locked" ? "openings_state_locked" : "openings_state_closed");
@@ -598,7 +585,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
           iconBackground: tintOn(this, color, undefined, OPENINGS_ICON_TINT),
           label: `${row.name}, ${text}`,
           onClick: () => this._tap(row.entry),
-          middle: html`<div class="op-name">${row.name}</div><div class="op-sub">${text}</div>`,
+          middle: html`<div class="compact-row-name">${row.name}</div><div class="compact-row-sub">${text}</div>`,
           rightInteractive: true,
           right: this._deviceAction(row, true),
         });
@@ -662,6 +649,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
     glassCardStyles,
     cardHeaderStyles,
     listRowStyles,
+    compactStatusStyles,
     css`
       ha-card {
         color: var(--m3p-text, var(--primary-text-color));
@@ -680,10 +668,6 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
           color 400ms ease;
       }
 
-      .m3-header:not([role="button"]) {
-        cursor: default;
-      }
-
       .row-end {
         display: flex;
         align-items: center;
@@ -691,11 +675,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       }
 
       .device-action {
-        min-height: 36px;
-        min-width: 44px;
-        padding: 0 10px;
         border: 0;
-        border-radius: 18px;
         background: var(--op-pill-ok-bg);
         color: var(--op-pill-ok-ink);
         font: inherit;
@@ -717,22 +697,8 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
       /* ---- header right ---- */
       .hero {
         display: flex;
-        align-items: baseline;
-        gap: 5px;
         flex-shrink: 0;
         color: var(--op-hero);
-      }
-
-      .hero-n {
-        font-size: ${OPENINGS_HERO_SIZE}px;
-        font-weight: 700;
-        line-height: 1;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .hero-l {
-        font-size: 14px;
-        font-weight: 600;
       }
 
       .pill {
@@ -765,45 +731,7 @@ export class M3OpeningsCard extends TemplatedCard(LitElement) implements Lovelac
         color: var(--op-pill-warn-ink);
       }
 
-      /* ---- the open group ---- */
-      .open-group .lr-row:first-child {
-        border-top-left-radius: ${OPENINGS_GROUP_RADIUS_OUTER}px;
-        border-top-right-radius: ${OPENINGS_GROUP_RADIUS_OUTER}px;
-      }
-
-      .open-group .lr-row:last-child {
-        border-bottom-left-radius: ${OPENINGS_GROUP_RADIUS_OUTER}px;
-        border-bottom-right-radius: ${OPENINGS_GROUP_RADIUS_OUTER}px;
-      }
-
-      .open-group .lr-row:active {
-        border-radius: ${OPENINGS_GROUP_RADIUS_PRESSED}px;
-      }
-
-      .open-group .lr-icon ha-icon {
-        --mdc-icon-size: 18px;
-      }
-
-      .op-name {
-        font-size: 14px;
-        font-weight: 600;
-        line-height: 1.25;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--m3p-text, var(--primary-text-color));
-      }
-
-      .op-sub {
-        font-size: 12px;
-        line-height: 1.3;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--m3p-secondary-text, var(--secondary-text-color));
-      }
-
-      .op-sub.warn {
+      .compact-row-sub.warn {
         color: var(--op-duration-warn);
         font-weight: 600;
       }

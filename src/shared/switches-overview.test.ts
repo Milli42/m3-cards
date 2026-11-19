@@ -12,18 +12,22 @@ describe("isOverviewSwitch", () => {
 });
 
 describe("switchOverviewTap", () => {
-  it("toggles the only switch in a room", () => {
-    expect(switchOverviewTap(["switch.workbench"])).toEqual({
+  it("opens the room popup for a single switch", () => {
+    expect(switchOverviewTap(["switch.workbench"], false)).toEqual({ action: "popup" });
+  });
+
+  it("opens the room popup for multiple switches", () => {
+    expect(switchOverviewTap(["switch.workbench", "input_boolean.notifications"], false)).toEqual({ action: "popup" });
+  });
+
+  it("opens the room popup for an empty room", () => {
+    expect(switchOverviewTap([], false)).toEqual({ action: "popup" });
+  });
+
+  it("toggles an individual entity tile", () => {
+    expect(switchOverviewTap(["switch.workbench"], true)).toEqual({
       action: "toggle",
       entityId: "switch.workbench",
     });
-  });
-
-  it("opens the room popup when there is more than one switch", () => {
-    expect(switchOverviewTap(["switch.workbench", "input_boolean.notifications"])).toEqual({ action: "popup" });
-  });
-
-  it("takes no action for an empty room", () => {
-    expect(switchOverviewTap([])).toEqual({ action: "none" });
   });
 });

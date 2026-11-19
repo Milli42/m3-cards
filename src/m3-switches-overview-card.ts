@@ -203,8 +203,8 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
     }
   }
 
-  private _tap(tile: SwitchTile): void {
-    const tap = switchOverviewTap(tile.entities);
+  private _tap(tile: SwitchTile, entityView: boolean): void {
+    const tap = switchOverviewTap(tile.entities, entityView);
     if (tap.action === "popup") this._openPopup(tile);
     if (tap.action === "toggle") {
       const state = this.hass?.states[tap.entityId]?.state;
@@ -305,19 +305,19 @@ export class M3SwitchesOverviewCard extends TemplatedCard(LitElement) implements
   private _renderGrid(tiles: SwitchTile[], onColor: string, offColor: string, entityView: boolean, inPopup: boolean) {
     return tiles.length
       ? html`<div class="room-grid ${entityView ? "entity-grid" : ""}">
-          ${repeat(tiles, (tile) => tile.key, (tile) => this._renderTile(tile, tile.onCount ? onColor : offColor, inPopup))}
+          ${repeat(tiles, (tile) => tile.key, (tile) => this._renderTile(tile, tile.onCount ? onColor : offColor, entityView, inPopup))}
         </div>`
       : html`<div class="empty-state">${this._t("switches_overview_empty")}</div>`;
   }
 
-  private _renderTile(tile: SwitchTile, color: string, inPopup: boolean) {
+  private _renderTile(tile: SwitchTile, color: string, entityView: boolean, inPopup: boolean) {
     const cfg = this._config;
     const on = tile.onCount > 0;
     const stateIcon = on ? SWITCH_ON_ICON : SWITCH_OFF_ICON;
     const stateLabel = this._t(on ? "lights_overview_on" : "lights_overview_off");
     const ariaLabel = `${tile.name}: ${stateLabel}`;
     const listeners = this._gestures.listeners({
-      onTap: () => this._tap(tile),
+      onTap: () => this._tap(tile, entityView),
       onHold: inPopup ? undefined : () => this._openPopup(tile),
       onPressChange: (pressed) => {
         this._pressedKey = pressed ? tile.key : undefined;

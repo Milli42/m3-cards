@@ -737,9 +737,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     if (!entity || !level) return body;
 
     return html`
-      <div class="tile-with-slider" style=${`--tile-color: ${level.domain === "fan" ? onColor : color};`}>
+      <div class="tile-with-slider">
         ${body}
-        ${this._renderLevelSlider(entity.entity_id, level, tile.name, tile.unavailable)}
+        ${this._renderLevelSlider(entity.entity_id, level, tile.name, tile.unavailable, level.domain === "fan" ? onColor : color)}
       </div>
     `;
   }
@@ -750,7 +750,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     this.hass?.callService(level.domain, level.service, { [level.field]: percent }, { entity_id: entityId });
   }
 
-  private _renderLevelSlider(id: string, level: EntityLevel, name: string, unavailable: boolean) {
+  private _renderLevelSlider(id: string, level: EntityLevel, name: string, unavailable: boolean, color: string) {
     const percent = this._levelDrags.get(id)?.value ?? level.value;
     const percentAt = (e: PointerEvent): number => {
       const track = (e.currentTarget as HTMLElement).firstElementChild!;
@@ -807,7 +807,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         aria-valuetext=${`${percent}%`}
         aria-disabled=${unavailable ? "true" : "false"}
         tabindex=${unavailable ? -1 : 0}
-        style=${`--brightness: ${percent}%;`}
+        style=${`--slider-color: ${color}; --brightness: ${percent}%;`}
         @pointerdown=${(e: PointerEvent) => {
           e.stopPropagation();
           if (e.isPrimary && e.button === 0 && !unavailable) pointer.down(e);
@@ -874,7 +874,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       }
 
       .brightness-slider:focus-visible {
-        outline: 2px solid var(--tile-color);
+        outline: 2px solid var(--slider-color);
       }
 
       .brightness-track {
@@ -882,7 +882,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         height: 32px;
         overflow: hidden;
         border-radius: inherit;
-        background: color-mix(in srgb, var(--tile-color) 20%, transparent);
+        background: color-mix(in srgb, var(--slider-color) 20%, transparent);
       }
 
       .brightness-track::before {
@@ -891,7 +891,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         width: var(--brightness);
         height: 100%;
         border-radius: inherit;
-        background: var(--tile-color);
+        background: var(--slider-color);
       }
 
     `,

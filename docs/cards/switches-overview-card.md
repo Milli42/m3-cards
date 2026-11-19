@@ -24,9 +24,9 @@ exclude_entities:
 
 ### Room controls
 
-Tap a room with one switch to toggle it. Tap a room with multiple switches to
-open its popup. Hold any room tile to open the same popup. Tap an individual
-switch tile in the popup to toggle that switch.
+Tap or hold any room tile to open its popup, including rooms with a single
+switch. Tap an individual switch tile in the popup or in the main card’s
+`view: entities` mode to toggle that switch.
 
 ### Entity source and filters
 

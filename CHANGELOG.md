@@ -6,6 +6,19 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.15.0] – 2026-11-19
+
+### Changed
+
+- **Lights Overview** uses `fan_color` for the speed slider fill and tinted
+  track whether the fan is on or off.
+- **Switches Overview** opens the room popup on tap or hold for every room.
+  Individual switch tiles still toggle in the popup and in `view: entities`.
+- **Openings** shows only open and unlocked rows while any opening needs
+  closing or locking.
+- **Availability** matches the compact header, counts, rows, and action button
+  sizing of the Openings card.
+
 ## [2.14.0] – 2026-11-19
 
 ### Added
