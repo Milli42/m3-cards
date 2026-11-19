@@ -315,6 +315,26 @@ describe("discoverLightRooms on the hass registry snapshots", () => {
     ]);
   });
 
+  it("allows an explicitly included unassigned receiver to form its own room", async () => {
+    const receiver = "media_player.receiver";
+    const hass = hassFromSnapshots({
+      states: {
+        [receiver]: { state: "standby", attributes: { friendly_name: "Receiver" } },
+        "media_player.tv": { state: "off" },
+      },
+      entities: { [receiver]: {}, "media_player.tv": {} },
+      areas: {},
+    });
+    const options = {
+      domains: ["media_player"],
+      includeUnassigned: (id: string) => id.startsWith("media_player."),
+    };
+    expect(await discoverLightRooms(hass, options)).toEqual([]);
+    expect(await discoverLightRooms(hass, { ...options, filter: { include_entities: [receiver] } })).toEqual([
+      { areaId: receiver, name: "Receiver", icon: undefined, entities: [receiver], toggleEntities: [receiver] },
+    ]);
+  });
+
   it("drops an area-less light rather than giving it a room of its own", async () => {
     const hass = hassFromSnapshots({
       states: { "light.nowhere": { state: "on" } },

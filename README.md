@@ -60,7 +60,7 @@ card links to its full documentation further down.
 | [Button](#m3-button-card) | `m3-button-card` | Generic button/entity card for any domain |
 | [Cover](#m3-cover-card) | `m3-cover-card` | Blinds/shutters that adapt to the device's capabilities, plus a group mode |
 | [Lights Overview](#m3-lights-overview-card) | `m3-lights-overview-card` | Every light grouped by area, with separate display and toggle filters |
-| [Switches Overview](#m3-switches-overview-card) | `m3-switches-overview-card` | Switches and input booleans grouped by area, with individual controls in a room popup |
+| [Switches Overview](#m3-switches-overview-card) | `m3-switches-overview-card` | Switches, input booleans, and optional media players grouped by area, with individual controls in a room popup |
 | [Chip Buttons](#m3-chip-buttons-card) | `m3-chip-buttons-card` | A row of compact entity pills, each with its own actions |
 
 ### 🚪 Presence & safety
@@ -5457,9 +5457,9 @@ sliders on a standalone card in `entities` view, set
 
 ## M3 Switches Overview Card
 
-A room-by-room overview of Home Assistant switches and input booleans. Each
-room tile shows its on/off state and how many switches are on. The header
-counts rooms with an active switch and the total number of active switches.
+A room-by-room overview of Home Assistant switches, input booleans, and optional
+media players. Each room tile shows its on/off state and how many entities are
+on. The header counts active rooms and entities.
 
 <details>
 <summary>Configuration, examples & options</summary>
@@ -5474,13 +5474,22 @@ exclude_entities:
 ### Room controls
 
 Tap or hold any room tile to open its popup, including rooms with a single
-switch. Tap an individual switch tile in the popup or in the main card’s
-`view: entities` mode to toggle that switch.
+switch. Tap an individual tile in the popup or in the main card’s
+`view: entities` mode to toggle the entity. Media players count as on in any
+state except `off`, `standby`, `unavailable`, or `unknown`. Tapping an on
+media player calls `media_player.turn_off`. Tapping one in `off` or
+`standby` calls `media_player.turn_on`. Unavailable and unknown entities
+ignore taps.
 
 ### Entity source and filters
 
 Auto-discovery groups `switch.*` and `input_boolean.*` by their Home Assistant
 area, using the device's area when the entity has no area of its own.
+Set `include_media_players: true` to also discover media players assigned to
+an area that report both power features (`TURN_ON` 128 and `TURN_OFF` 256).
+You can explicitly add a receiver through `rooms[].entities` or, when using
+auto-discovery, `include_entities`. Explicitly listed media players are
+eligible regardless of the option or their reported power features.
 Use `include_area`, `exclude_area`, `include_labels`, `exclude_labels`,
 `include_entities`, and `exclude_entities` to narrow the results. State
 filters (`include_state` and `exclude_state`) update as entities change state.
@@ -5497,6 +5506,9 @@ rooms:
     entities:
       - switch.workbench
       - input_boolean.garage_notifications
+  - name: Living room
+    entities:
+      - media_player.surround_receiver
   - name: Laundry
     entities:
       - switch.laundry_fan
@@ -5505,12 +5517,14 @@ rooms:
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | `auto_discover` | boolean | `true` | Find switches and input booleans assigned to areas |
+| `include_media_players` | boolean | `false` | Auto-discover media players with both power features |
 | `rooms` | list | — | Manual rooms with `name`, optional `icon`, and `entities` |
 | `include_area` / `exclude_area` | list | — | Filter by area ID |
 | `include_labels` / `exclude_labels` | list | — | Filter by entity or device label ID |
 | `include_entities` / `exclude_entities` | list | — | Filter by entity ID |
 | `include_state` / `exclude_state` | list | — | Filter by current state |
-| `view` | string | `rooms` | Choose `rooms` or `entities` for individual switch tiles |
+| `view` | string | `include_media_players` | boolean | `false` | Auto-discover media players with both power features |
+| `rooms` | Choose `rooms` or `entities` for individual entity tiles |
 | `sort` | string | `name` | Sort by `name`, `area`, or `on_first` |
 | `name` / `icon` | string | Localized name and toggle icon | Override the header name or icon |
 | `show_header` | boolean | `true` | Show the title and summary |

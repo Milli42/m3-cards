@@ -3499,6 +3499,7 @@ export interface SwitchesOverviewManualRoomConfig {
 export interface M3SwitchesOverviewCardConfig extends EntityFilterConfig {
   type: string;
   auto_discover?: boolean;
+  include_media_players?: boolean;
   rooms?: SwitchesOverviewManualRoomConfig[];
   view?: LightsOverviewView;
   sort?: LightsOverviewSort;

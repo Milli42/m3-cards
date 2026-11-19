@@ -66,6 +66,7 @@ export class M3SwitchesOverviewCardEditor extends LitElement implements Lovelace
   private _discoverySchema(): SchemaEntry[] {
     return [
       { name: "auto_discover", selector: { boolean: {} } },
+      { name: "include_media_players", selector: { boolean: {} } },
       { name: "include_area", selector: { area: { multiple: true } } },
       { name: "exclude_area", selector: { area: { multiple: true } } },
       { name: "include_labels", selector: { label: { multiple: true } } },
@@ -144,6 +145,7 @@ export class M3SwitchesOverviewCardEditor extends LitElement implements Lovelace
     const labelMap: Record<string, TranslationKey> = {
       shape_by_state: "editor_shape_by_state",
       auto_discover: "editor_lights_auto_discover",
+      include_media_players: "editor_switches_include_media_players",
       include_area: "editor_lights_include_area",
       exclude_area: "editor_lights_exclude_area",
       include_labels: "editor_lights_include_labels",
@@ -268,6 +270,7 @@ export class M3SwitchesOverviewCardEditor extends LitElement implements Lovelace
 
     const discoveryData = {
       auto_discover: cfg.auto_discover ?? !rooms.length,
+      include_media_players: cfg.include_media_players ?? false,
       include_area: cfg.include_area ?? [],
       exclude_area: cfg.exclude_area ?? [],
       include_labels: cfg.include_labels ?? [],

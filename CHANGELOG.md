@@ -6,6 +6,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.16.0] – 2026-11-19
+
+### Added
+
+- **Switches Overview** supports media player power controls for explicitly
+  included entities and opt-in area discovery with `include_media_players`.
+
 ## [2.15.1] – 2026-11-19
 
 ### Changed
