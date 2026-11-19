@@ -5473,9 +5473,9 @@ exclude_entities:
 
 ### Room controls
 
-Tap a room with one switch to toggle it. Tap a room with multiple switches to
-open its popup. Hold any room tile to open the same popup. Tap an individual
-switch tile in the popup to toggle that switch.
+Tap or hold any room tile to open its popup, including rooms with a single
+switch. Tap an individual switch tile in the popup or in the main card’s
+`view: entities` mode to toggle that switch.
 
 ### Entity source and filters
 
@@ -7741,9 +7741,9 @@ A list turns discovery off; `auto_discover: true` turns it back on.
   cover, shows an outdoor-temperature pill after `warn_after_minutes` when
   the reading is below `cold_below`. Without a usable outdoor reading,
   eligible rows highlight the duration on time alone.
-- **Closed or locked:** green chips show closed sensors and covers with a check
-  and locked locks with a lock icon. Unreachable and jammed items appear first
-  with a warning icon and are excluded from the closed count.
+- **Incomplete status:** when there are no open or unlocked items, unavailable
+  and jammed items appear first as warning chips, followed by closed or locked
+  items. When anything is open or unlocked, the card shows only those rows.
 - **All closed or secure:** the card shows one line with an **All closed** pill,
   or **All secure** when the list includes a cover or lock. Tap the secure
   header to reveal **Open** and **Unlock** controls, then tap it again to fold
@@ -7765,7 +7765,7 @@ A list turns discovery off; `auto_discover: true` turns it back on.
 | `outdoor_temperature` | — | Temperature sensor for the cold warning |
 | `warn_after_minutes` | `15` | Minutes open before a row warns |
 | `cold_below` | `10` | Outdoor temperature below which it warns |
-| `max_chips` | `4` | Chips before "+N" |
+| `max_chips` | `4` | Chips before "+N" when the status is incomplete |
 | `tap_action` | `more-info` | For every row and chip |
 | `color_open`, `color_warn`, `color_closed` | amber, red, green | The three states |
 | `card_background`, `text_color`, `secondary_text_color` | — | The card's own colours |

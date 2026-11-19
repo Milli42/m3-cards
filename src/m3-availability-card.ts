@@ -11,16 +11,8 @@ import type {
 import {
   CARD_VERSION,
   AVAILABILITY_CRITICAL_COLOR,
-  AVAILABILITY_HEADER_ICON,
-  AVAILABILITY_HEADER_RADIUS,
   AVAILABILITY_HISTORY_DAYS,
-  AVAILABILITY_ICON_RADIUS,
-  AVAILABILITY_ICON_SIZE,
   AVAILABILITY_OK_COLOR,
-  AVAILABILITY_ROW_GAP,
-  AVAILABILITY_ROW_HEIGHT,
-  AVAILABILITY_ROW_RADIUS,
-  AVAILABILITY_ROW_RADIUS_ACTIVE,
   AVAILABILITY_TICK_MS,
   AVAILABILITY_WARN_COLOR,
   DEFAULT_AVAILABILITY_CRITICAL_HOURS,
@@ -34,7 +26,9 @@ import {
 import { buildCssVars, foregroundColor, foregroundOn, resolveCommonColors, resolveThemeColor, tintOn } from "./shared/color-config";
 import { glassCardClass, glassCardStyles } from "./shared/glass-card";
 import { isReducedMotion, shouldAnimate, STANDARD_EASING } from "./shared/animation";
-import { captureRowRects, flipRows } from "./shared/list-row";
+import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
+import { compactStatusStyles } from "./shared/compact-status";
+import { captureRowRects, flipRows, listRowStyles, renderListRow } from "./shared/list-row";
 import { localize, type TranslationKey } from "./localize";
 import { TemplatedCard } from "./shared/templated-card";
 import { openEntityDetail } from "./shared/entity-detail";
@@ -422,7 +416,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
 
   // ---- render --------------------------------------------------------------
 
-  private _renderRow(f: FlaggedUnit, critical: number, cls: string): TemplateResult {
+  private _renderRow(f: FlaggedUnit, critical: number): TemplateResult {
     const sev = severityOf(f, this._now, critical);
     const stale = f.kind === "stale";
     const st = this.hass?.states[f.unit.primary] as StateLike | undefined;
@@ -432,34 +426,26 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
       ? this._t("avail_quiet_since").replace("{t}", span)
       : this._t("avail_since").replace("{t}", span);
     const label = `${f.unit.name}, ${parts}, ${when}`;
-    return html`
-      <div
-        class="row ${stale ? "stale" : sev} ${cls}"
-        data-row-key=${f.unit.key}
-        role="button"
-        tabindex="0"
-        aria-label=${label}
-        @click=${() => this._open(f)}
-        @keydown=${(e: KeyboardEvent) => {
-          if (e.target !== e.currentTarget) return;
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            this._open(f);
-          }
-        }}
-      >
-        <div class="ricon">
-          <ha-icon icon=${unitIcon(f.unit.primary, st)}></ha-icon>
-          <span class="badge"><ha-icon icon=${stale ? "mdi:clock-outline" : "mdi:close"}></ha-icon></span>
-        </div>
-        <div class="rtext">
-          <div class="rname">${f.unit.name}</div>
-          <div class="rsub">
-            ${parts ? html`<span class="parts">${parts}</span><span class="dot">·</span>` : nothing}<span class="dur">${when}</span>
-          </div>
-        </div>
+    const tone = sev === "critical" ? "crit" : "warn";
+    return renderListRow({
+      key: f.unit.key,
+      icon: unitIcon(f.unit.primary, st),
+      iconColor: stale ? "var(--m3p-secondary-text)" : `var(--av-${tone}-fg)`,
+      iconBackground: stale ? tintOn(this, "var(--primary-text-color)", undefined, 12) : `var(--av-${tone}-icon)`,
+      rowBackground: stale ? tintOn(this, "var(--primary-text-color)", undefined, 7) : `var(--av-${tone}-row)`,
+      extraClass: stale ? "stale" : sev,
+      label,
+      onClick: () => this._open(f),
+      rightInteractive: true,
+      iconBadge: html`<span class="badge"><ha-icon icon=${stale ? "mdi:clock-outline" : "mdi:close"}></ha-icon></span>`,
+      middle: html`
+        <div class="compact-row-name">${f.unit.name}</div>
+        <div class="compact-row-sub rsub">
+          ${parts ? html`<span class="parts">${parts}</span><span class="dot">·</span>` : nothing}<span class="dur">${when}</span>
+        </div>`,
+      right: html`
         <button
-          class="bell"
+          class="bell compact-action"
           aria-label=${`${this._t("avail_mute")}: ${f.unit.name}`}
           title=${this._t("avail_mute")}
           @click=${(e: Event) => this._bellClick(e, f)}
@@ -471,9 +457,8 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
           @keydown=${(e: KeyboardEvent) => this._bellKey(e, f)}
         >
           <ha-icon icon="mdi:bell-off-outline"></ha-icon>
-        </button>
-      </div>
-    `;
+        </button>`,
+    });
   }
 
   private _renderGroup(title: string, rows: FlaggedUnit[], critical: number): TemplateResult | typeof nothing {
@@ -481,11 +466,11 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
     return html`
       <div class="group">
         <div class="group-title">${title}</div>
-        <div class="group-rows">
+        <div class="row-list compact-rows">
           ${repeat(
             rows,
             (f) => f.unit.key,
-            (f, i) => this._renderRow(f, critical, `${i === 0 ? "first" : ""} ${i === rows.length - 1 ? "last" : ""}`),
+            (f) => this._renderRow(f, critical),
           )}
         </div>
       </div>
@@ -530,17 +515,16 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
     const crit = cfg.critical_color ? resolveThemeColor(cfg.critical_color) : AVAILABILITY_CRITICAL_COLOR;
     const ok = cfg.accent_color && cfg.accent_color !== NEW_CARD_ACCENT ? resolveThemeColor(cfg.accent_color) : AVAILABILITY_OK_COLOR;
     const headColor = allOk ? ok : criticalCount ? crit : warn;
+    const headBg = tintOn(this, headColor, undefined, 22);
     const warnRow = tintOn(this, warn, undefined, 12);
     const critRow = tintOn(this, crit, undefined, 14);
     const cssVars = buildCssVars({
-      "av-text": textColorCss,
-      "av-secondary": secondaryTextColorCss,
+      "m3p-text": textColorCss,
+      "m3p-secondary-text": secondaryTextColorCss,
       "av-warn": warn,
       "av-crit": crit,
-      "av-ok": ok,
-      "av-head": headColor,
-      "av-head-bg": tintOn(this, headColor, undefined, 22),
-      "av-head-fg": foregroundOn(headColor, tintOn(this, headColor, undefined, 22), 3, this),
+      "m3p-icon-bg": headBg,
+      "m3p-icon-color": foregroundOn(headColor, headBg, 3, this),
       "av-head-text": foregroundColor(this, headColor),
       "av-warn-row": warnRow,
       "av-crit-row": critRow,
@@ -550,18 +534,11 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
       "av-crit-icon": tintOn(this, crit, undefined, 24),
       "av-ok-bg": tintOn(this, ok, undefined, 20),
       "av-ok-fg": foregroundOn(ok, tintOn(this, ok, undefined, 20), 4.5, this),
-      "av-row-h": `${AVAILABILITY_ROW_HEIGHT}px`,
-      "av-row-r": `${AVAILABILITY_ROW_RADIUS}px`,
-      "av-row-r-in": `${Math.round(AVAILABILITY_ROW_RADIUS_ACTIVE / 2)}px`,
-      "av-icon": `${AVAILABILITY_ICON_SIZE}px`,
-      "av-icon-r": `${AVAILABILITY_ICON_RADIUS}px`,
-      "av-head-icon": `${AVAILABILITY_HEADER_ICON}px`,
-      "av-head-r": `${AVAILABILITY_HEADER_RADIUS}px`,
-      "av-gap": `${AVAILABILITY_ROW_GAP / 2}px`,
     });
     const radius = resolveCornerRadius(cfg.radius ?? DEFAULT_AVAILABILITY_RADIUS, cfg.corners);
     const title = cfg.title || this._t("avail_title");
     const watched = this._index.length;
+    const watchedLabel = this._t("avail_of").replace("{n}", String(watched));
 
     let subtitle: string;
     if (allOk) subtitle = this._t("avail_ok_watched").replace("{n}", String(watched));
@@ -589,23 +566,19 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
           class="card-inner ${glassCardClass(cfg.glass_background)} ${this._animate ? "" : "no-animations"} ${allOk ? "all-ok" : ""}"
           style=${`border-radius: ${radius};${cardBackgroundCss ? ` background: ${cardBackgroundCss};` : ""}`}
         >
-          <div class="header">
-            <div class="head-icon">
-              <ha-icon icon=${allOk ? "mdi:wifi" : cfg.icon || DEFAULT_AVAILABILITY_ICON}></ha-icon>
-            </div>
-            <div class="head-text">
-              <div class="title">${title}</div>
-              <div class="subtitle">${subtitle}</div>
-            </div>
-            ${allOk
+          ${renderCardHeader({
+            icon: allOk ? "mdi:wifi" : cfg.icon || DEFAULT_AVAILABILITY_ICON,
+            name: title,
+            subtitle,
+            right: allOk
               ? html`<div class="ok-pill">${this._t("avail_ok_pill")}</div>`
-              : html`<div class="hero" aria-label=${`${visible.length} ${this._t("avail_offline")}, ${this._t("avail_of").replace("{n}", String(watched))}`}>
+              : html`<div class="hero" aria-label=${`${visible.length} ${this._t("avail_offline")}, ${watchedLabel}`}>
                   <div class="hero-line">
-                    <span class="hero-n">${visible.length}</span><span class="hero-unit">${this._t("avail_offline")}</span>
+                    <span class="hero-n">${visible.length}</span><span class="hero-l">${this._t("avail_offline")}</span>
                   </div>
-                  <div class="hero-of">${this._t("avail_of").replace("{n}", String(watched))}</div>
-                </div>`}
-          </div>
+                  <div class="hero-of">${watchedLabel}</div>
+                </div>`,
+          })}
 
           ${showChips
             ? html`<div class="chips" role="tablist">
@@ -679,70 +652,25 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
 
   static styles = [
     glassCardStyles,
+    cardHeaderStyles,
+    listRowStyles,
+    compactStatusStyles,
     css`
       .card-inner {
         gap: var(--m3-card-gap, 12px);
       }
-      .header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-height: var(--av-head-icon);
-      }
-      .head-icon {
-        flex: 0 0 auto;
-        width: var(--av-head-icon);
-        height: var(--av-head-icon);
-        border-radius: var(--av-head-r);
-        display: grid;
-        place-items: center;
-        background: var(--av-head-bg);
-        color: var(--av-head-fg, var(--av-head));
-        --mdc-icon-size: 24px;
-      }
-      .head-text {
-        flex: 1;
-        min-width: 0;
-      }
-      .title {
-        font-size: 16px;
-        font-weight: 700;
-        color: var(--av-text, var(--primary-text-color));
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .subtitle {
-        font-size: 13px;
-        color: var(--av-secondary, var(--secondary-text-color));
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
       .hero {
-        flex: 0 0 auto;
+        flex-shrink: 0;
         text-align: right;
       }
       .hero-line {
-        display: flex;
-        align-items: baseline;
         justify-content: flex-end;
-        gap: 4px;
-        color: var(--av-head-text, var(--av-head));
-      }
-      .hero-n {
-        font-size: 36px;
-        font-weight: 700;
-        line-height: 1;
-        letter-spacing: -0.02em;
-      }
-      .hero-unit {
-        font-size: 15px;
-        font-weight: 600;
+        color: var(--av-head-text);
       }
       .hero-of {
-        font-size: 12px;
-        color: var(--av-secondary, var(--secondary-text-color));
+        font-size: 11px;
+        line-height: 1.2;
+        color: var(--m3p-secondary-text);
       }
       .ok-pill {
         flex: 0 0 auto;
@@ -754,7 +682,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         font-size: 13px;
         font-weight: 700;
         background: var(--av-ok-bg);
-        color: var(--av-ok-fg, var(--av-ok));
+        color: var(--av-ok-fg);
       }
 
       .chips {
@@ -771,7 +699,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         border-radius: 18px;
         border: 1px solid color-mix(in srgb, var(--primary-text-color) 18%, transparent);
         background: transparent;
-        color: var(--av-text, var(--primary-text-color));
+        color: var(--m3p-text, var(--primary-text-color));
         font: inherit;
         font-size: 14px;
         font-weight: 600;
@@ -788,7 +716,6 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
       }
       .chip:focus-visible,
       .bell:focus-visible,
-      .row:focus-visible,
       .more:focus-visible,
       .muted-chip:focus-visible,
       .unmute:focus-visible {
@@ -802,107 +729,38 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         gap: 6px;
       }
       .group-title {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         padding: 0 4px;
-        color: var(--av-secondary, var(--secondary-text-color));
-      }
-      .group-rows {
-        display: flex;
-        flex-direction: column;
-        gap: var(--av-gap);
-      }
-      .row {
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-height: var(--av-row-h);
-        padding: 8px 8px 8px 10px;
-        box-sizing: border-box;
-        border-radius: var(--av-row-r-in);
-        background: var(--av-warn-row);
-        cursor: pointer;
-        transition: border-radius 200ms ease;
-        -webkit-tap-highlight-color: transparent;
-      }
-      .row.first {
-        border-top-left-radius: var(--av-row-r);
-        border-top-right-radius: var(--av-row-r);
-      }
-      .row.last {
-        border-bottom-left-radius: var(--av-row-r);
-        border-bottom-right-radius: var(--av-row-r);
-      }
-      .row.critical {
-        background: var(--av-crit-row);
-      }
-      .row.stale {
-        background: color-mix(in srgb, var(--primary-text-color) 7%, var(--ha-card-background, var(--card-background-color)));
-      }
-      .row:active {
-        border-radius: var(--av-row-r);
-      }
-      .ricon {
-        position: relative;
-        flex: 0 0 auto;
-        width: var(--av-icon);
-        height: var(--av-icon);
-        border-radius: var(--av-icon-r);
-        display: grid;
-        place-items: center;
-        background: var(--av-warn-icon);
-        color: var(--av-warn-fg, var(--av-warn));
-        --mdc-icon-size: 22px;
-      }
-      .row.critical .ricon {
-        background: var(--av-crit-icon);
-        color: var(--av-crit-fg, var(--av-crit));
-      }
-      .row.stale .ricon {
-        background: color-mix(in srgb, var(--primary-text-color) 12%, var(--ha-card-background, var(--card-background-color)));
-        color: var(--av-secondary, var(--secondary-text-color));
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
       }
       .badge {
         position: absolute;
-        right: -4px;
-        bottom: -4px;
-        width: 18px;
-        height: 18px;
+        right: -3px;
+        bottom: -3px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         display: grid;
         place-items: center;
         background: var(--av-warn);
         color: #1c1c1c;
         box-shadow: 0 0 0 2px var(--ha-card-background, var(--card-background-color, #1c1c1c));
-        --mdc-icon-size: 12px;
       }
-      .row.critical .badge {
+      .compact-rows .badge ha-icon {
+        --mdc-icon-size: 10px;
+      }
+      .critical .badge {
         background: var(--av-crit);
       }
-      .row.stale .badge {
-        background: var(--av-secondary, var(--secondary-text-color));
-      }
-      .rtext {
-        flex: 1;
-        min-width: 0;
-      }
-      .rname {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--av-text, var(--primary-text-color));
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      .stale .badge {
+        background: var(--m3p-secondary-text, var(--secondary-text-color));
       }
       /* The duration is what the row is about: it never shrinks, the room and
          integration give way first. */
       .rsub {
         display: flex;
         min-width: 0;
-        font-size: 13px;
-        color: var(--av-secondary, var(--secondary-text-color));
-        white-space: nowrap;
       }
       .rsub .parts {
         min-width: 0;
@@ -920,32 +778,31 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         font-weight: 600;
         color: var(--av-warn-fg, var(--av-warn));
       }
-      .row.critical .rsub .dur {
+      .critical .rsub .dur {
         color: var(--av-crit-fg, var(--av-crit));
       }
-      .row.stale .rsub .dur {
-        color: var(--av-secondary, var(--secondary-text-color));
+      .stale .rsub .dur {
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
         font-style: italic;
       }
       .bell {
         flex: 0 0 auto;
         width: 44px;
-        height: 44px;
-        border-radius: 12px;
+        height: 36px;
         border: 1px solid color-mix(in srgb, var(--primary-text-color) 18%, transparent);
         background: transparent;
-        color: var(--av-text, var(--primary-text-color));
+        color: var(--m3p-text, var(--primary-text-color));
         display: grid;
         place-items: center;
         cursor: pointer;
-        --mdc-icon-size: 20px;
+        --mdc-icon-size: 18px;
         transition: border-radius 200ms ease;
         touch-action: manipulation;
         -webkit-touch-callout: none;
         user-select: none;
       }
       .bell:active {
-        border-radius: 22px;
+        border-radius: 12px;
       }
 
       .more,
@@ -963,7 +820,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         font-weight: 600;
         cursor: pointer;
         background: color-mix(in srgb, var(--primary-text-color) 7%, var(--ha-card-background, var(--card-background-color)));
-        color: var(--av-secondary, var(--secondary-text-color));
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
         --mdc-icon-size: 18px;
       }
       .more ha-icon,
@@ -993,14 +850,14 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         padding: 0 4px 0 12px;
         border-radius: 14px;
         background: color-mix(in srgb, var(--primary-text-color) 5%, var(--ha-card-background, var(--card-background-color)));
-        color: var(--av-secondary, var(--secondary-text-color));
+        color: var(--m3p-secondary-text, var(--secondary-text-color));
         --mdc-icon-size: 18px;
       }
       .muted-name {
         flex: 1;
         min-width: 0;
         font-size: 14px;
-        color: var(--av-text, var(--primary-text-color));
+        color: var(--m3p-text, var(--primary-text-color));
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -1014,13 +871,12 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         border: none;
         border-radius: 12px;
         background: transparent;
-        color: var(--av-text, var(--primary-text-color));
+        color: var(--m3p-text, var(--primary-text-color));
         display: grid;
         place-items: center;
         cursor: pointer;
       }
 
-      .no-animations .row,
       .no-animations .chip,
       .no-animations .bell,
       .no-animations .more ha-icon,
@@ -1033,8 +889,6 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
          need. */
       @supports not (color: color-mix(in srgb, red 50%, blue)) {
         .chip.active,
-        .row.stale,
-        .row.stale .ricon,
         .more,
         .muted-chip,
         .muted-row {

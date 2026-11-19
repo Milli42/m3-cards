@@ -19,6 +19,7 @@ export interface ListRowParams {
   icon: string;
   iconColor: string;
   iconBackground: string;
+  iconBadge?: TemplateResult;
   middle: TemplateResult;
   right?: TemplateResult;
   /** The right slot includes its own control. Give the row a separate button. */
@@ -74,6 +75,7 @@ export function renderListRow(p: ListRowParams): TemplateResult {
         style=${`--lr-icon-color: ${foregroundOn(p.iconColor, p.iconBackground, 3, p.host)}; --lr-icon-bg: ${p.iconBackground};`}
       >
         <ha-icon icon=${p.icon}></ha-icon>
+        ${p.iconBadge ?? nothing}
       </div>
       <div class="lr-middle">${p.middle}</div>
       ${rowAction

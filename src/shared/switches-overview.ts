@@ -9,8 +9,8 @@ export type SwitchOverviewTap =
   | { action: "popup" }
   | { action: "none" };
 
-export function switchOverviewTap(entities: readonly string[]): SwitchOverviewTap {
+export function switchOverviewTap(entities: readonly string[], entityView: boolean): SwitchOverviewTap {
+  if (!entityView) return { action: "popup" };
   if (entities.length === 1) return { action: "toggle", entityId: entities[0] };
-  if (entities.length > 1) return { action: "popup" };
   return { action: "none" };
 }
