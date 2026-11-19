@@ -686,6 +686,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     });
     const on = tile.onCount > 0;
     const color = on ? onColor : offColor;
+    const background = tintOn(this, color, this._config?.tile_tint_opacity, on ? 20 : 10);
     const stateIcon = tile.fanGroup || this._fanPopup
       ? (on ? "mdi:fan" : "mdi:fan-off")
       : (on ? "mdi:lightbulb-on" : "mdi:lightbulb-outline");
@@ -699,7 +700,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
           : ""} ${on ? "is-on" : ""} ${this._pressedKey === tile.key ? "pressed" : ""} ${this._config?.shape_by_state === true
           ? "shaped"
           : ""}"
-        style=${`--tile-color: ${color}; background: ${tintOn(this, color, this._config?.tile_tint_opacity, on ? 20 : 10)};`}
+        style=${`--tile-color: ${color}; background: ${background};`}
         role="button"
         tabindex="0"
         aria-label=${ariaLabel}
@@ -735,11 +736,13 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       : undefined;
     const level = entity && entityLevel(entity);
     if (!entity || !level) return body;
+    const offFan = level.domain === "fan" && !on;
 
     return html`
       <div class="tile-with-slider">
         ${body}
-        ${this._renderLevelSlider(entity.entity_id, level, tile.name, tile.unavailable, level.domain === "fan" ? onColor : color)}
+        ${this._renderLevelSlider(entity.entity_id, level, tile.name, tile.unavailable,
+          offFan ? background : color, offFan ? background : undefined)}
       </div>
     `;
   }
@@ -750,7 +753,10 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
     this.hass?.callService(level.domain, level.service, { [level.field]: percent }, { entity_id: entityId });
   }
 
-  private _renderLevelSlider(id: string, level: EntityLevel, name: string, unavailable: boolean, color: string) {
+  private _renderLevelSlider(
+    id: string, level: EntityLevel, name: string, unavailable: boolean, color: string,
+    trackColor = "color-mix(in srgb, var(--slider-color) 20%, transparent)",
+  ) {
     const percent = this._levelDrags.get(id)?.value ?? level.value;
     const percentAt = (e: PointerEvent): number => {
       const track = (e.currentTarget as HTMLElement).firstElementChild!;
@@ -807,7 +813,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         aria-valuetext=${`${percent}%`}
         aria-disabled=${unavailable ? "true" : "false"}
         tabindex=${unavailable ? -1 : 0}
-        style=${`--slider-color: ${color}; --brightness: ${percent}%;`}
+        style=${`--slider-color: ${color}; --slider-track-color: ${trackColor}; --brightness: ${percent}%;`}
         @pointerdown=${(e: PointerEvent) => {
           e.stopPropagation();
           if (e.isPrimary && e.button === 0 && !unavailable) pointer.down(e);
@@ -882,7 +888,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         height: 32px;
         overflow: hidden;
         border-radius: inherit;
-        background: color-mix(in srgb, var(--slider-color) 20%, transparent);
+        background: var(--slider-track-color);
       }
 
       .brightness-track::before {
