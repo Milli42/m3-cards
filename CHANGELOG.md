@@ -6,6 +6,15 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.10.0] – 2026-11-19
+
+### Changed
+
+- **Leak card** now shows only wet sensor rows by default. Set
+  `show_only_wet: false` to show the full sensor list.
+- **Lights Overview card** now shows brightness sliders for dimmable lights
+  in the default room popup.
+
 ## [2.9.0] – 2026-11-18
 
 ### Added

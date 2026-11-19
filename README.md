@@ -3390,9 +3390,13 @@ valve_entity: valve.main_water        # optional: valve / switch / cover
 # siren_entity: siren.alarm           # optional, for the acknowledge button
 ```
 
-`max_visible` keeps the list short: the first few sensors are shown and the
-rest sit behind a "show N more" toggle. It steps aside during an alarm —
-whichever sensor is wet has to be on screen without another tap.
+By default, `show_only_wet` shows every wet sensor during an alarm. When no
+sensor is wet, the card shows the banner and its chips only. The banner still
+reflects the full sensor set.
+
+Set `show_only_wet: false` to list dry and offline sensors as well.
+`collapse_ok` folds that list while all sensors are OK. `max_visible` puts
+extra rows behind a "show N more" toggle and shows the full list during an alarm.
 
 ### Configuration options
 
@@ -3408,6 +3412,7 @@ whichever sensor is wet has to be on screen without another tap.
 | `stale_hours` | number | `24` | How long a silence lasts before `stale_check` counts it |
 | `battery_warn` / `battery_critical` | number | `40` / `20` | Battery chip thresholds |
 | `test_interval_days` | number | `0` | Show a "test due" chip after N days (with `last_test_entity`) |
+| `show_only_wet` | boolean | `true` | Show only wet sensor rows and hide the list when none are wet |
 | `max_visible` | number | – | Show only this many sensors, the rest behind a toggle |
 | `collapse_ok` | boolean | `false` | Collapse the list while all dry |
 | `notify_service` / `notify_enabled` | – | – | Optional push on water detection (off by default) |
@@ -5376,6 +5381,14 @@ Same action system as Climate Overview: `tap_action` (default `toggle`) /
 Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
 `[[name]]` placeholders resolved against the tapped room).
 
+The default grid popup shows a brightness slider beneath each dimmable light.
+Drag the slider or use the arrow keys in 5% steps. Adjusting an off light turns
+it on at the selected brightness. Tap the light tile to toggle it, or tap the
+room tile on the main card to toggle the room. Set
+`popup.show_brightness_slider: false` to hide the popup sliders. To show
+sliders on a standalone card in `entities` view, set
+`show_brightness_slider: true`.
+
 ### Configuration options
 
 | Option | Type | Default | Description |
@@ -5394,6 +5407,7 @@ Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
 | `show_header` | boolean | `true` | Card header |
 | `show_count` | boolean | `true` | "N/total on" on a multi-light tile |
 | `shape_by_state` | boolean | `false` | A tile whose lights are all off rounds out; one with a light on keeps its corners |
+| `show_brightness_slider` | boolean | `false` | Show brightness sliders for dimmable lights in `entities` view |
 | `show_area` | boolean | `true` | Room name caption in `entities` view |
 | `hide_empty_rooms` | boolean | `false` | Drop rooms with no matching lights |
 | `toggle_filter` | object (same fields as the display filter) | – | Narrower filter for what a tap actually switches |
@@ -5401,7 +5415,8 @@ Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
 | `toggle_inherit_filters` | boolean | `true` | Whether `toggle_filter` narrows the display filter or stands alone |
 | `toggle_group_handling` | `all` \| `prefer_groups` \| `prefer_members` | `group_handling` | `group_handling`, applied to the toggle set instead |
 | `tap_action` / `hold_action` / `double_tap_action` | action config | toggle / popup / none | Tap/hold/double-tap actions; adds a `popup` action kind |
-| `popup` | object (`mode`, `title`, `view`, `sort`, `show_area`, `show_header`, `card`, filter fields) | – | Popup shown by the `popup` action — see above |
+| `popup` | object (`mode`, `title`, `view`, `sort`, `show_area`, `show_header`, `show_brightness_slider`, `card`, filter fields) | – | Popup shown by the `popup` action — see above |
+| `popup.show_brightness_slider` | boolean | `true` | Show brightness sliders in the default grid popup’s entity view |
 | `on_color` / `off_color` | string | theme default | Tile color by state |
 | `accent_color` / `accent_opacity` | string / number | theme default / `12` | Header icon accent |
 | `tile_tint_opacity` | number | – | Tile background tint strength |

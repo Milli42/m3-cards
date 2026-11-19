@@ -55,6 +55,7 @@ import { hexToHs, hsToRgb, lightColorHex, rgbToHex, rgbToHs } from "./shared/col
 import { localize, type TranslationKey } from "./localize";
 import { hassChangeMatters } from "./shared/should-update";
 import { DragThrottle } from "./shared/drag-throttle";
+import { hasDimmableColorMode } from "./shared/light-brightness";
 import { TemplatedCard } from "./shared/templated-card";
 import { openEntityDetail } from "./shared/entity-detail";
 import { runHaAction, navigateTo } from "./shared/actions";
@@ -552,7 +553,7 @@ export class M3LightCard extends TemplatedCard(LitElement) implements LovelaceCa
 
     const modes: string[] = entity.attributes.supported_color_modes ?? [];
     const hasBrightness =
-      modes.some((m) => m !== "onoff") ||
+      hasDimmableColorMode(modes) ||
       (modes.length === 0 && entity.attributes.brightness !== undefined);
     const supportsColorTemp = modes.includes("color_temp");
     const supportsColor = modes.some((m) => ["hs", "rgb", "rgbw", "rgbww", "xy"].includes(m));
