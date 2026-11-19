@@ -179,6 +179,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
 
   private _toggleSchema(): SchemaEntry[] {
     return [
+      { name: "toggle_on_brightness", selector: { number: { min: 0, max: 100, step: 1, mode: "box", unit_of_measurement: "%" } } },
       { name: "exclude_toggle_entities", selector: { entity: { domain: "light", multiple: true } } },
       { name: "toggle_inherit_filters", selector: { boolean: {} } },
       { name: "toggle_group_handling", selector: this._groupHandlingSelector() },
@@ -262,6 +263,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
       show_area: "editor_lights_show_area",
       show_brightness_slider: "editor_lights_show_brightness_slider",
       hide_empty_rooms: "editor_lights_hide_empty_rooms",
+      toggle_on_brightness: "editor_lights_toggle_on_brightness",
       exclude_toggle_entities: "editor_lights_exclude_toggle",
       toggle_inherit_filters: "editor_lights_toggle_inherit",
       toggle_group_handling: "editor_lights_toggle_group_handling",
@@ -458,6 +460,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
     };
 
     const toggleData = {
+      toggle_on_brightness: cfg.toggle_on_brightness === false ? 0 : cfg.toggle_on_brightness ?? 100,
       exclude_toggle_entities: cfg.exclude_toggle_entities ?? [],
       toggle_inherit_filters: cfg.toggle_inherit_filters ?? true,
       toggle_group_handling: cfg.toggle_group_handling ?? cfg.group_handling ?? "all",

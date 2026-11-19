@@ -3460,6 +3460,8 @@ export interface M3LightsOverviewCardConfig extends EntityFilterConfig, DetailMo
   toggle_filter?: EntityFilterConfig;
   exclude_toggle_entities?: string[];
   toggle_inherit_filters?: boolean;
+  /** Brightness percentage when a tap turns on a dimmable light. Defaults to 100; 0 or false keeps the last brightness. */
+  toggle_on_brightness?: number | false;
   toggle_group_handling?: LightGroupHandling;
   tap_action?: HaActionConfig;
   hold_action?: HaActionConfig;
