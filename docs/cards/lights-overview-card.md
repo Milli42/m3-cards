@@ -53,7 +53,9 @@ number of fans on alongside the room and light counts.
 Tap or hold the Fans tile to open its fan controls. Tap an individual fan
 to toggle it. Fans with adjustable speed get a pill slider that follows
 their reported speed steps. Dragging the slider turns an off fan on at the
-selected speed. `toggle_on_brightness` applies only to lights.
+selected speed. `fan_color` sets the active color of the Fans tile and
+individual fan tiles, and colors the speed sliders. `toggle_on_brightness`
+applies only to lights.
 
 ### What's shown vs. what a tap switches
 
@@ -123,6 +125,7 @@ sliders on a standalone card in `entities` view, set
 | `popup` | object (`mode`, `title`, `view`, `sort`, `show_area`, `show_header`, `show_brightness_slider`, `card`, filter fields) | – | Popup shown by the `popup` action — see above |
 | `popup.show_brightness_slider` | boolean | `true` | Show brightness sliders in the default grid popup’s entity view |
 | `on_color` / `off_color` | string | theme default | Tile color by state |
+| `fan_color` | string | `#00BCD4` | Theme color name or CSS color for active fan tiles and fan speed sliders |
 | `accent_color` / `accent_opacity` | string / number | theme default / `12` | Header icon accent |
 | `tile_tint_opacity` | number | – | Tile background tint strength |
 | `text_color` / `secondary_text_color` | string | theme default | Room names/values vs. secondary text |

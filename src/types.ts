@@ -3473,6 +3473,42 @@ export interface M3LightsOverviewCardConfig extends EntityFilterConfig, DetailMo
   /** Show brightness sliders in the entities view. Defaults to false. */
   show_brightness_slider?: boolean;
   popup?: LightsOverviewPopupConfig;
+  /** Active fan tile and fan speed slider color (theme token or CSS color). */
+  fan_color?: string;
+  on_color?: string;
+  off_color?: string;
+  accent_color?: string;
+  accent_opacity?: number;
+  tile_tint_opacity?: number;
+  text_color?: string;
+  secondary_text_color?: string;
+  card_background?: string;
+  animation?: "auto" | "on" | "off";
+  glass_background?: boolean;
+  radius?: number;
+  corners?: CornerRadiusConfig;
+  card_version?: string;
+}
+
+export interface SwitchesOverviewManualRoomConfig {
+  name: string;
+  icon?: string;
+  entities?: string[];
+}
+
+export interface M3SwitchesOverviewCardConfig extends EntityFilterConfig {
+  type: string;
+  auto_discover?: boolean;
+  rooms?: SwitchesOverviewManualRoomConfig[];
+  view?: LightsOverviewView;
+  sort?: LightsOverviewSort;
+  name?: string;
+  icon?: string;
+  show_header?: boolean;
+  show_count?: boolean;
+  show_area?: boolean;
+  hide_empty_rooms?: boolean;
+  shape_by_state?: boolean;
   on_color?: string;
   off_color?: string;
   accent_color?: string;

@@ -54,6 +54,7 @@ body:
         - Solar Battery (m3-solar-battery-card)
         - Status (m3-status-card)
         - Supply (m3-supply-card)
+        - Switches Overview (m3-switches-overview-card)
         - System (m3-system-card)
         - Tariff (m3-tariff-card)
         - Time (m3-time-card)

@@ -6,6 +6,16 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.14.0] – 2026-11-19
+
+### Added
+
+- **Lights Overview** adds a separate `fan_color` for active fan tiles and
+  speed sliders, with a cyan default.
+- **Switches Overview** groups switches and input booleans by area. Tap a
+  single-switch room to toggle it, or open a room popup to control its
+  switches individually.
+
 ## [2.13.0] – 2026-11-19
 
 ### Changed

@@ -23,6 +23,7 @@ import {
 
 type LightsOverviewColorField =
   | "on_color"
+  | "fan_color"
   | "off_color"
   | "accent_color"
   | "text_color"
@@ -626,6 +627,7 @@ export class M3LightsOverviewCardEditor extends LitElement implements LovelaceCa
           <ha-icon slot="leading-icon" icon="mdi:palette-outline"></ha-icon>
           <div class="panel-content">
             ${colorRow(this._t("editor_lights_on_color"), cfg.on_color, (v) => this._colorChanged("on_color", v))}
+            ${colorRow(this._t("editor_lights_fan_color"), cfg.fan_color, (v) => this._colorChanged("fan_color", v))}
             ${colorRow(this._t("editor_lights_off_color"), cfg.off_color, (v) => this._colorChanged("off_color", v))}
             ${opacityRow(this._t("editor_lights_tile_tint_opacity"), cfg.tile_tint_opacity, 12, (v) =>
               this._opacityChanged("tile_tint_opacity", v),
