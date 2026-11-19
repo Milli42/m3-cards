@@ -19,3 +19,25 @@ export function lightBrightnessPercent(entity: HassEntity): number {
 export function clampLightBrightnessPercent(percent: number): number {
   return Math.min(100, Math.max(LIGHT_MIN_BRIGHTNESS_PCT, Math.round(percent)));
 }
+
+export function splitLightTurnOnTargets(
+  entityIds: string[],
+  states: Record<string, HassEntity>,
+  toggleOnBrightness: number | false = 100,
+): { dimmable: string[]; remaining: string[]; brightness: number } {
+  if (toggleOnBrightness === false || toggleOnBrightness === 0) {
+    return { dimmable: [], remaining: entityIds, brightness: 0 };
+  }
+
+  const brightness = clampLightBrightnessPercent(
+    Number.isFinite(toggleOnBrightness) ? toggleOnBrightness : 100,
+  );
+  const dimmable: string[] = [];
+  const remaining: string[] = [];
+  for (const id of entityIds) {
+    const entity = states[id];
+    if (entity && isDimmableLight(entity)) dimmable.push(id);
+    else remaining.push(id);
+  }
+  return { dimmable, remaining, brightness };
+}

@@ -53,6 +53,10 @@ toggle. `toggle_inherit_filters: false` makes `toggle_filter` stand alone
 instead of narrowing the display filter. A manual room's `toggle_entities`
 defaults to its `entities`.
 
+Every visible light in the default grid popup's entity view can be toggled
+individually, even if a global or manual room exclusion, `toggle_filter`, or
+`toggle_entities` keeps it out of the main room toggle.
+
 ### Tap, hold and the popup
 
 Same action system as Climate Overview: `tap_action` (default `toggle`) /
@@ -66,7 +70,9 @@ Lovelace card built from `popup.card`, with `[[area_id]]`, `[[entity_id]]`,
 The default grid popup shows a brightness slider beneath each dimmable light.
 Drag the slider or use the arrow keys in 5% steps. Adjusting an off light turns
 it on at the selected brightness. Tap the light tile to toggle it, or tap the
-room tile on the main card to toggle the room. Set
+room tile on the main card to toggle the room. Both taps turn dimmable lights
+on at 100% by default. Set `toggle_on_brightness` to a percentage from 1 to
+100, or use `0` or `false` to keep Home Assistant's last brightness. Set
 `popup.show_brightness_slider: false` to hide the popup sliders. To show
 sliders on a standalone card in `entities` view, set
 `show_brightness_slider: true`.
@@ -87,13 +93,14 @@ sliders on a standalone card in `entities` view, set
 | `view` | `rooms` \| `entities` | `rooms` | Tile per room, or a flat per-light list |
 | `sort` | `name` \| `area` \| `on_first` | `name` | Tile order |
 | `show_header` | boolean | `true` | Card header |
-| `show_count` | boolean | `true` | "N/total on" on a multi-light tile |
+| `show_count` | boolean | `true` | "N/total" next to the state on a multi-light tile |
 | `shape_by_state` | boolean | `false` | A tile whose lights are all off rounds out; one with a light on keeps its corners |
 | `show_brightness_slider` | boolean | `false` | Show brightness sliders for dimmable lights in `entities` view |
 | `show_area` | boolean | `true` | Room name caption in `entities` view |
 | `hide_empty_rooms` | boolean | `false` | Drop rooms with no matching lights |
 | `toggle_filter` | object (same fields as the display filter) | – | Narrower filter for what a tap actually switches |
-| `exclude_toggle_entities` | list\<string\> | – | Shorthand: show these, but never toggle them |
+| `exclude_toggle_entities` | list\<string\> | – | Show these entities and exclude them from the main card's toggle |
+| `toggle_on_brightness` | number or `false` | `100` | Brightness percentage for dimmable lights turned on by a room or entity tile. Use `0` or `false` to keep the last brightness |
 | `toggle_inherit_filters` | boolean | `true` | Whether `toggle_filter` narrows the display filter or stands alone |
 | `toggle_group_handling` | `all` \| `prefer_groups` \| `prefer_members` | `group_handling` | `group_handling`, applied to the toggle set instead |
 | `tap_action` / `hold_action` / `double_tap_action` | action config | toggle / popup / none | Tap/hold/double-tap actions; adds a `popup` action kind |

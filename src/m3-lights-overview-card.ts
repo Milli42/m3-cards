@@ -55,7 +55,12 @@ import { localize, type TranslationKey } from "./localize";
 import { TemplatedCard } from "./shared/templated-card";
 import { openEntityDetail } from "./shared/entity-detail";
 import { DragThrottle } from "./shared/drag-throttle";
-import { clampLightBrightnessPercent, isDimmableLight, lightBrightnessPercent } from "./shared/light-brightness";
+import {
+  clampLightBrightnessPercent,
+  isDimmableLight,
+  lightBrightnessPercent,
+  splitLightTurnOnTargets,
+} from "./shared/light-brightness";
 import { capturePointer, sliderPointer, SLIDER_TOUCH_ACTION } from "./shared/slider-intent";
 import { stopSwipe } from "./shared/swipe";
 
@@ -323,16 +328,25 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
   // Any light on means the room reads as on, so a tap turns everything off —
   // a plain toggle would flip each lamp individually and leave a chequerboard.
-  //
-  // `homeassistant` rather than `light`, because a room's lighting is not
-  // always in the light domain: a lamp on a smart plug is a `switch`, and a
-  // manual room takes whatever entity ids it is given. `light.turn_on` simply
-  // fails on those. The generic service covers every switchable domain, and
-  // for a real light it does exactly what `light.turn_on` did.
   private _toggleRoom(tile: LightsOverviewTile): void {
-    if (!this.hass || tile.switchable.length === 0) return;
-    const anyOn = tile.switchable.some((id) => this.hass!.states[id]?.state === "on");
-    this.hass.callService("homeassistant", anyOn ? "turn_off" : "turn_on", {}, { entity_id: tile.switchable });
+    const hass = this.hass;
+    if (!hass || tile.switchable.length === 0) return;
+    if (tile.switchable.some((id) => hass.states[id]?.state === "on")) {
+      hass.callService("homeassistant", "turn_off", {}, { entity_id: tile.switchable });
+      return;
+    }
+
+    const { dimmable, remaining, brightness } = splitLightTurnOnTargets(
+      tile.switchable,
+      hass.states,
+      this._config?.toggle_on_brightness,
+    );
+    if (dimmable.length) {
+      hass.callService("light", "turn_on", { brightness_pct: brightness }, { entity_id: dimmable });
+    }
+    if (remaining.length) {
+      hass.callService("homeassistant", "turn_on", {}, { entity_id: remaining });
+    }
   }
 
   private _defaultAction(kind: ActionKind): HaActionConfig {
@@ -433,18 +447,22 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       ? { include_area: [tile.areaId], rooms: undefined, auto_discover: true }
       : {
           rooms: [
-            { name: tile.name, entities: tile.entities, toggle_entities: tile.switchable },
+            { name: tile.name, entities: tile.entities, toggle_entities: tile.entities },
           ],
           auto_discover: false,
         };
+    const view = popup.view ?? "entities";
     return {
       ...cfg,
       ...merged,
       ...scoped,
-      view: popup.view ?? "entities",
+      exclude_toggle_entities: undefined,
+      toggle_filter: undefined,
+      toggle_inherit_filters: undefined,
+      view,
       sort: popup.sort ?? "name",
       group_handling: popup.group_handling ?? cfg.group_handling,
-      toggle_group_handling: popup.toggle_group_handling ?? cfg.toggle_group_handling,
+      toggle_group_handling: view === "entities" ? undefined : popup.toggle_group_handling,
       show_area: popup.show_area ?? false,
       show_brightness_slider: popup.show_brightness_slider ?? true,
       // The popup's header carries the room name, so it stays unless the
@@ -626,18 +644,16 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         <div class="tile-state">
           <ha-icon class="bulb" icon=${on ? "mdi:lightbulb-on" : "mdi:lightbulb-outline"}></ha-icon>
           <span class="state-text">${stateLabel}</span>
-        </div>
-        ${tile.secondary
-          ? html`<div class="tile-count">${tile.secondary}</div>`
-          : this._config?.show_count !== false && tile.total > 1
-            ? html`
-                <div class="tile-count">
+          ${tile.secondary
+            ? html`<span class="tile-secondary" title=${tile.secondary}>${tile.secondary}</span>`
+            : this._config?.show_count !== false && tile.total > 1
+              ? html`<span class="tile-secondary">
                   ${this._t("lights_overview_count")
                     .replace("{on}", String(tile.onCount))
                     .replace("{total}", String(tile.total))}
-                </div>
-              `
-            : nothing}
+                </span>`
+              : nothing}
+        </div>
       </div>
     `;
     const entity = this._config?.view === "entities" && this._config.show_brightness_slider
@@ -780,8 +796,9 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       .brightness-slider {
         display: flex;
         align-items: center;
-        gap: 5px;
-        min-height: 24px;
+        position: relative;
+        margin-top: 2px;
+        min-height: 36px;
         border-radius: 999px;
         cursor: ew-resize;
         touch-action: ${unsafeCSS(SLIDER_TOUCH_ACTION)};
@@ -797,16 +814,20 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       }
 
       .brightness-value {
-        min-width: 4ch;
-        color: var(--m3p-secondary-text);
-        font-size: 10px;
+        position: absolute;
+        inset-inline-end: 6px;
+        padding: 2px 6px;
+        border-radius: inherit;
+        background: rgb(0 0 0 / 75%);
+        color: white;
+        font-size: 12px;
         font-variant-numeric: tabular-nums;
-        text-align: end;
+        pointer-events: none;
       }
 
       .brightness-track {
-        flex: 1;
-        height: 8px;
+        width: 100%;
+        height: 32px;
         overflow: hidden;
         border-radius: inherit;
         background: color-mix(in srgb, var(--tile-color) 20%, transparent);
@@ -822,12 +843,12 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
       }
 
       .room-tile {
-        padding: 11px 9px;
+        padding: 9px;
         border-radius: ${LIGHTS_OVERVIEW_TILE_RADIUS}px;
         cursor: pointer;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 2px;
         box-sizing: border-box;
         /* iOS would otherwise answer a long press with the text-selection
            magnifier and its own share/copy callout. */
@@ -905,6 +926,7 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
 
       .tile-state .bulb {
         --mdc-icon-size: 18px;
+        flex-shrink: 0;
         color: var(--tile-color);
       }
 
@@ -915,7 +937,12 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
         line-height: 1.1;
       }
 
-      .tile-count {
+      .tile-secondary {
+        min-width: 0;
+        margin-inline-start: auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-size: 10px;
         opacity: 0.55;
         color: var(--m3p-secondary-text);

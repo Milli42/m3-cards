@@ -5,6 +5,7 @@ import {
   hasDimmableColorMode,
   isDimmableLight,
   lightBrightnessPercent,
+  splitLightTurnOnTargets,
 } from "./light-brightness";
 
 function entity(entity_id: string, attributes: HassEntity["attributes"], state = "on"): HassEntity {
@@ -35,5 +36,38 @@ describe("light brightness", () => {
     expect(clampLightBrightnessPercent(0)).toBe(1);
     expect(clampLightBrightnessPercent(34.7)).toBe(35);
     expect(clampLightBrightnessPercent(105)).toBe(100);
+  });
+});
+
+describe("light turn-on targets", () => {
+  const states = {
+    "light.desk": entity("light.desk", { supported_color_modes: ["brightness"] }, "off"),
+    "light.ceiling": entity("light.ceiling", { supported_color_modes: ["onoff"] }, "off"),
+    "switch.lamp": entity("switch.lamp", { supported_color_modes: ["brightness"] }, "off"),
+  };
+  const ids = [...Object.keys(states), "light.missing"];
+
+  it("defaults to 100% for dimmable lights and routes other targets to the generic service", () => {
+    expect(splitLightTurnOnTargets(ids, states)).toEqual({
+      dimmable: ["light.desk"],
+      remaining: ["light.ceiling", "switch.lamp", "light.missing"],
+      brightness: 100,
+    });
+  });
+
+  it("uses the configured brightness for a single dimmable light", () => {
+    expect(splitLightTurnOnTargets(["light.desk"], states, 42)).toEqual({
+      dimmable: ["light.desk"],
+      remaining: [],
+      brightness: 42,
+    });
+  });
+
+  it.each([0, false] as const)("preserves the last brightness when set to %s", (setting) => {
+    expect(splitLightTurnOnTargets(ids, states, setting)).toEqual({
+      dimmable: [],
+      remaining: ids,
+      brightness: 0,
+    });
   });
 });

@@ -6,6 +6,16 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+## [2.11.0] – 2026-11-19
+
+### Changed
+
+### Changed
+
+- **Lights Overview card** has more compact room tiles and larger brightness
+  sliders. Dimmable lights turn on at configurable brightness (100% by
+  default), and excluded lights can be toggled individually in the room popup.
+
 ## [2.10.0] – 2026-11-19
 
 ### Changed
