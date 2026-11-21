@@ -1658,9 +1658,35 @@ top_count: 7
 - Refreshes every 15 minutes. Devices with 0 kWh in the period are omitted
   entirely.
 
+### Live power
+
+Choose **Live** in the period picker to rank devices by current power. A thin
+bar above the rows uses the device colors to show their shares. Add a whole-home
+consumption sensor to show its current reading and the untracked remainder.
+Without one, the bar shows the mix of tracked devices only. If a whole-home
+reading is unavailable or lower than the device sum, the card explains why
+it is using tracked power for device shares instead.
+
+```yaml
+type: custom:m3-top-consumers-card
+period: live
+power_entity: sensor.house_power    # Optional; use home load, not net grid import
+power_entities:
+  - entity: sensor.heat_pump_power
+  - entity: sensor.office_power
+    name: Office
+  - entity: sensor.fridge_power
+```
+
+Use power sensors in W or kW, not energy meters in kWh. Off, unavailable,
+and negative device readings do not appear in the ranking. The gauge includes
+all active devices, even if some rows are collapsed or hidden. The card updates
+as Home Assistant receives new readings; it does not query Recorder in Live
+mode. `source`, `entities`, and cost settings apply only to historical periods.
+
 ### Ranking, overflow row, name cleanup
 
-- Sorted descending by consumption. `top_count` (default 7) devices are
+- Sorted descending by consumption. `top_count` (default 3) devices are
   shown as full rows with share bars.
 - All remaining devices land, depending on `rest_mode`, in a collapsible
   overflow row (`collapse`, default), are omitted entirely (`hide`), or
@@ -1698,8 +1724,10 @@ overflow row appear in `currency`.
 |---|---|---|---|
 | `source` | `energy` \| `entities` | `energy` | Data source |
 | `entities` | list | – | Only for `source: entities` — `entity`, optionally `name`/`icon`/`color` |
-| `period` | `today` \| `yesterday` \| `week` \| `month` | `today` | Time range |
-| `top_count` | number | `7` | Number of full rows before the overflow row |
+| `period` | `live` \| `today` \| `yesterday` \| `week` \| `month` | `today` | Live power or historical time range |
+| `power_entity` | string | – | Optional whole-home power sensor for `period: live` |
+| `power_entities` | list | – | Device power sensors for `period: live` — `entity`, optionally `name`/`icon`/`color` |
+| `top_count` | number | `3` | Number of full rows before the overflow row |
 | `rest_mode` | `collapse` \| `hide` \| `show_all` | `collapse` | Behavior for devices beyond `top_count` |
 | `name_strip` | string[] | see above | Regex/text patterns removed from entity names |
 | `unit_mode` | `energy` \| `cost` | `energy` | Rank by kWh or by cost |

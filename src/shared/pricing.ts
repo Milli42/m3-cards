@@ -112,11 +112,14 @@ export async function resolveEffectivePrice(
   config: PricingConfig,
   periodStart: Date,
   periodEnd: Date,
-): Promise<number | undefined> {
+  isCurrent: () => boolean,
+): Promise<number | undefined | null> {
   if (config.price_source !== "energy_dashboard") {
     return resolveCurrentPrice(hass, config);
   }
   const [costIds, grid] = await Promise.all([getGridCostEntities(hass), getGridEntities(hass)]);
+  // Do not enqueue new Recorder work if the ranking changed while discovery was pending.
+  if (!isCurrent()) return null; // Cancelled, not a missing price.
   if (!costIds || !grid || grid.from.length === 0) return undefined;
   const [costByEntity, kwhByEntity] = await Promise.all([
     fetchPeriodChangeByEntity(hass, costIds, periodStart, periodEnd, "day"),
