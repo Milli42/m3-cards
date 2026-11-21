@@ -458,7 +458,7 @@ export type EnergyFlowSource = "energy" | "entities";
 export type FlowBatteryVisibility = "auto" | "always" | "never";
 export type FlowSpeed = "slow" | "normal" | "fast";
 
-export interface M3EnergyFlowCardConfig {
+export interface M3EnergyFlowCardConfig extends DetailModeConfig {
   type: string;
   source?: EnergyFlowSource;
   solar_entity?: string;
@@ -483,8 +483,13 @@ export interface M3EnergyFlowCardConfig {
    * `compact`: the nodes side by side in one row, about as tall as a tile,
    * for a half-width slot next to a weather or status card (#54).
    * `power-station`: direct power readings and battery levels in two rows.
+   * `water`: current water flow with a compact gauge and animated waves.
    */
-  layout?: "full" | "compact" | "power-station";
+  layout?: "full" | "compact" | "power-station" | "water";
+  /** Current water flow rate sensor (not a cumulative water meter). */
+  water_entity?: string;
+  /** Gauge scale maximum, in the water sensor's own units. */
+  water_max?: number;
   /** The header with name and subtitle. Default: on for `full` only. */
   show_header?: boolean;
   /** A separate charge sensor (positive), e.g. "charged today" in kWh. */

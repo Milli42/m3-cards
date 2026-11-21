@@ -47,6 +47,7 @@ import { displayUnit, flowMeasure, toBase, type FlowMeasure } from "./shared/ene
 import { localize, type TranslationKey } from "./localize";
 import { formatNumber } from "./shared/formatting";
 import { hassChangeMatters } from "./shared/should-update";
+import { openEntityDetail } from "./shared/entity-detail";
 import { TemplatedCard } from "./shared/templated-card";
 
 console.info(
@@ -167,11 +168,11 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
   }
 
   public getCardSize(): number {
-    return this._config?.layout === "power-station" ? 2 : 4;
+    return this._isDirectLayout ? 2 : 4;
   }
 
   public getGridOptions(): LovelaceGridOptions {
-    if (this._config?.layout === "compact" || this._config?.layout === "power-station") {
+    if (this._config?.layout === "compact" || this._isDirectLayout) {
       return { columns: 6, rows: "auto", min_columns: 3 };
     }
     return {
@@ -210,12 +211,16 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     this._maybeFetch();
   }
 
+  private get _isDirectLayout(): boolean {
+    return this._config?.layout === "power-station" || this._config?.layout === "water";
+  }
+
   private get _usesEnergyDashboard(): boolean {
-    return !!this._config && this._config.source !== "entities" && this._config.layout !== "power-station";
+    return !!this._config && this._config.source !== "entities" && !this._isDirectLayout;
   }
 
   private _invalidateEnergyRequestForDirectMode(): void {
-    if (!this._usesEnergyDashboard && this._energyRequest) {
+    if (!this._usesEnergyDashboard) {
       this._energyRequest = undefined;
       this._lastFetchKey = undefined;
     }
@@ -233,7 +238,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
   protected willUpdate(changed: PropertyValues): void {
     super.willUpdate?.(changed);
     this._invalidateEnergyRequestForDirectMode();
-    if (this._config?.source === "entities" && this._config.layout !== "power-station" &&
+    if (this._config?.source === "entities" && !this._isDirectLayout &&
       (changed.has("hass") || changed.has("_config"))) this._readEntities();
   }
 
@@ -527,14 +532,15 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
       this._config?.extra_battery_soc_entity,
       this._config?.home_entity,
       this._config?.grid_entity,
+      this._config?.water_entity,
     ]);
   }
 
   protected render() {
     if (!this._config || !this.hass) return nothing;
 
-    const station = this._config.layout === "power-station";
-    if (!station && this._config.source !== "entities" && this._noEnergyDashboard) {
+    const water = this._config.layout === "water";
+    if (this._usesEnergyDashboard && this._noEnergyDashboard) {
       return html`
         <ha-card>
           <div class="card-inner glass">
@@ -546,7 +552,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
 
     const name = this._config.name || this._t("flow_default_name");
     const icon = this._config.icon || DEFAULT_FLOW_ICON;
-    const power = station || this._measure === "power";
+    const power = this._isDirectLayout || this._measure === "power";
     const subtitle = this._config.subtitle || this._t(power ? "flow_subtitle_now" : "flow_subtitle_today");
     const pvColor = this._config.pv_color
       ? resolveThemeColor(this._config.pv_color)
@@ -585,14 +591,16 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     });
 
     const compact = this._config.layout === "compact";
-    const showHeader = this._config.show_header ?? !(compact || station);
-    if (station) {
+    const showHeader = this._config.show_header ?? !(compact || this._isDirectLayout);
+    if (this._isDirectLayout) {
       return html`
         <ha-card style=${`${cssVars} border-radius: ${radius};`}>
-          <div class="card-inner station ${glassCardClass(this._config.glass_background)}"
+          <div class="card-inner ${water ? "water-card" : "station"} ${glassCardClass(this._config.glass_background)}"
             style=${`border-radius: ${radius};${cardBackgroundCss ? ` background: ${cardBackgroundCss};` : ""}`}>
-            ${showHeader ? renderCardHeader({ icon, name, subtitle }) : nothing}
-            ${this._renderPowerStation({ pv: pvColor, grid: gridColor, home: homeColor, battery: batteryColor })}
+            ${water ? this._renderWater() : html`
+              ${showHeader ? renderCardHeader({ icon, name, subtitle }) : nothing}
+              ${this._renderPowerStation({ pv: pvColor, grid: gridColor, home: homeColor, battery: batteryColor })}
+            `}
           </div>
         </ha-card>
       `;
@@ -693,6 +701,44 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     return tintOn(this, color, opacity === undefined ? undefined : Math.max(0, Math.min(100, opacity)), defaultPercent);
   }
 
+  private _renderWater() {
+    const c = this._config!;
+    const id = c.water_entity;
+    const st = id ? this.hass?.states[id] : undefined;
+    const rate = cssNumber(st?.state);
+    const valid = rate !== undefined && rate >= 0;
+    const flowing = valid && rate > 0;
+    const scale = cssNumber(c.water_max);
+    const maximum = scale !== undefined && scale > 0 ? scale : 10;
+    const fill = valid ? Math.min(1, rate / maximum) * 100 : 0;
+    const unit = st?.attributes.unit_of_measurement;
+    const digits = (value: number) => formatNumber(this._language, value, { maximumFractionDigits: 3 });
+    const amount = valid ? (flowing && rate < 0.001 ? `<${digits(0.001)}` : digits(rate)) : "—";
+
+    const status = this._t(!valid ? "unavailable" : flowing ? "flow_water_active" : "flow_water_idle");
+    const content = html`
+      <span class="water-copy">
+        <span class="water-name">${c.name || this._t("flow_water_name")}</span>
+        <span class="water-value">${amount}${valid && typeof unit === "string" && unit
+          ? html`<span class="water-unit"> ${unit}</span>` : nothing}</span>
+        <span class="water-status">${status}</span>
+      </span>
+      <span class="water-art ${flowing ? "water-active" : ""}" aria-hidden="true">
+        <ha-icon icon=${c.icon || "mdi:water"}></ha-icon>
+        <svg viewBox="0 0 80 28" preserveAspectRatio="none" focusable="false">
+          <g class=${flowing && shouldAnimate(c.animation) ? "water-moving" : ""}>
+            <path d="M0 9 Q10 2 20 9 T40 9 T60 9 T80 9 T100 9 T120 9 V28 H0 Z"></path>
+            <path d="M0 17 Q10 10 20 17 T40 17 T60 17 T80 17 T100 17 T120 17 V28 H0 Z"></path>
+          </g>
+        </svg>
+      </span>
+      <span class="water-track" aria-hidden="true"><span class="water-fill" style=${`width: ${fill}%`}></span></span>
+    `;
+    return st ? html`
+      <button class="water-layout flow-detail-button" type="button" @click=${() => openEntityDetail(this, id)}>${content}</button>
+    ` : html`<div class="water-layout">${content}</div>`;
+  }
+
   private _renderPowerStation(colors: { pv: string; grid: string; home: string; battery: string }) {
     const c = this._config!;
     const tile = (id: string | undefined, label: string, icon: string, color: string, battery = false) => {
@@ -706,15 +752,18 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         text = battery ? `${number}%` : typeof unit === "string" && unit ? `${number} ${unit}` : number;
       }
       const tint = this._nodeTint(color, 18);
-      return html`
-        <div class="ctile station-tile" title=${`${label}: ${text}`}>
-          <span class="cicon" style=${`background-color: ${tint}; color: ${foregroundOn(color, tint)};`}>
-            <ha-icon icon=${icon} aria-hidden="true"></ha-icon>
-          </span>
-          <span class="cname">${label}</span>
-          <span class="cvalue">${text}</span>
-        </div>
+      const title = `${label}: ${text}`;
+      const content = html`
+        <span class="cicon" style=${`background-color: ${tint}; color: ${foregroundOn(color, tint)};`}>
+          <ha-icon icon=${icon} aria-hidden="true"></ha-icon>
+        </span>
+        <span class="cname">${label}</span>
+        <span class="cvalue">${text}</span>
       `;
+      return st ? html`
+        <button type="button" class="ctile station-tile flow-detail-button" title=${title}
+          @click=${() => openEntityDetail(this, id)}>${content}</button>
+      ` : html`<div class="ctile station-tile" title=${title}>${content}</div>`;
     };
     const batteries = [
       [c.battery_soc_entity, c.battery_name || this._t("flow_station_combined"), "mdi:battery-high"],
@@ -974,6 +1023,75 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         font-size: 10px;
       }
 
+      .card-inner.water-card {
+        padding: var(--m3-group-padding, 6px);
+      }
+      .water-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) clamp(45px, 26%, 96px);
+        gap: 7px 10px;
+        align-items: stretch;
+        padding: 6px 8px;
+        border-radius: 16px;
+        text-align: start;
+        --water-blue: #43a5e4;
+      }
+      .water-copy {
+        display: grid;
+        align-content: center;
+        gap: 2px;
+        overflow-wrap: anywhere;
+      }
+      .water-name, .water-status {
+        color: var(--m3p-secondary-text);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .water-name { font-weight: 650; }
+      .water-value {
+        color: var(--m3p-text);
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+      }
+      .water-unit { font-size: 11px; font-weight: 650; }
+      .water-art {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        padding-top: 5px;
+        min-height: 52px;
+        overflow: hidden;
+        border-radius: 14px;
+        color: var(--water-blue);
+        background-color: color-mix(in srgb, var(--water-blue) 15%, transparent);
+        --mdc-icon-size: 18px;
+      }
+      .water-art svg {
+        position: absolute;
+        inset: auto 0 0;
+        width: 100%;
+        height: 24px;
+        fill: currentColor;
+        opacity: 0.42;
+      }
+      .water-active svg { opacity: 0.95; }
+      .water-art path:first-child { opacity: 0.35; }
+      .water-art path:last-child { opacity: 0.70; }
+      .water-moving { animation: m3-water-flow 1.8s linear infinite; }
+      @keyframes m3-water-flow { to { transform: translateX(-40px); } }
+      @media (prefers-reduced-motion: reduce) {
+        .water-moving { animation: none; }
+      }
+      .water-track {
+        grid-column: 1 / -1;
+        height: 4px;
+        overflow: hidden;
+        border-radius: 4px;
+        background-color: color-mix(in srgb, var(--water-blue) 20%, transparent);
+      }
+      .water-fill { display: block; height: 100%; background-color: var(--water-blue); }
       .card-inner.station {
         gap: 0;
         padding: var(--m3-group-padding, 6px);
@@ -996,6 +1114,23 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         gap: 1px;
         padding: 2px 1px;
         text-align: center;
+      }
+      .flow-detail-button {
+        appearance: none;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      .flow-detail-button:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: -2px;
+      }
+      @media (hover: hover) {
+        .flow-detail-button:hover {
+          background-color: color-mix(in srgb, var(--m3p-text) 8%, transparent);
+        }
       }
       .station-tile .cicon {
         width: 20px;

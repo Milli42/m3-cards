@@ -1288,6 +1288,8 @@ or battery power sensor is required; the card does not estimate battery watts or
 calculate a combined percentage. Zero is shown as zero, and unavailable readings
 are shown as `—`. Unconfigured battery tiles are omitted. This layout does not
 show flow animations or a self-sufficiency estimate.
+Tap any configured tile with an existing entity to open Home Assistant's
+More info dialog and see that sensor's history.
 
 In the visual editor, choose **Power station: two rows** under Content → Layout,
 then pick your sensors under Entities. Replace the sample entity IDs below with yours.
@@ -1303,6 +1305,27 @@ battery_soc_entity: sensor.ecoflow_combined_battery
 main_battery_soc_entity: sensor.ecoflow_main_battery
 extra_battery_soc_entity: sensor.ecoflow_extra_battery
 ```
+
+### Water flow gauge (Flume and similar)
+
+Add a second M3 Energy Flow card and choose **Content → Layout → Water: flow gauge**.
+Under **Entities**, select Flume's **Current** water flow sensor (not its daily or
+monthly usage total). The card displays the current rate in the sensor's own units,
+with waves that move while the rate is positive and stay still at zero or when
+the sensor is unavailable. Tap the gauge to open the sensor's More info and history.
+
+```yaml
+type: custom:m3-energy-flow-card
+layout: water
+name: Flume Water Flow
+water_entity: sensor.flume_current_flow # replace with your current-flow entity
+water_max: 10 # scale maximum in the sensor's units, e.g. 10 gal/min
+```
+
+Set **Gauge maximum** (optional, default `10`) to a useful upper end for your
+normal use. A rate above it still displays the full reading. Set `animation: "off"`
+to keep the waves still; the card also respects reduced motion. No Energy Dashboard
+setup is needed. The card updates as Home Assistant receives new sensor readings.
 
 ### Energy or power
 
@@ -1344,7 +1367,10 @@ paused) when `animation: "off"` or `prefers-reduced-motion` is active.
 | `solar_entity` / `grid_import_entity` / `grid_export_entity` / `battery_entity` | string | – | For `source: entities`; `power-station` uses only solar and grid import from this group. See [The battery](#the-battery) for the sign of `battery_entity` |
 | `grid_entity` | string | – | Only for `source: entities` — one signed grid sensor instead of the import/export pair: positive draws from the grid, negative feeds in |
 | `grid_invert` | boolean | `false` | `grid_entity` counts export as positive |
-| `layout` | `full` \| `compact` \| `power-station` | `full` | `compact`: one row of flow nodes. `power-station`: two rows of direct sensor readings, independent of `source` |
+| `layout` | `full` \| `compact` \| `power-station` \| `water` | `full` | `compact`: one row of flow nodes. `power-station`: direct sensor readings. `water`: current water flow gauge. Both direct layouts are independent of `source` |
+| `water_entity` | string | – | Current water flow rate sensor used in `water` |
+| `water_max` | number | `10` | Water gauge maximum, in the sensor's own units |
+| `detail_mode` | `more_info` \| `sheet` | `more_info` | Details opened when tapping a sensor in `power-station` or `water` |
 | `show_header` | boolean | `true` for `full` only | The header with name and subtitle |
 | `battery_invert` | boolean | `false` | `battery_entity` counts charging as positive |
 | `battery_charge_entity` | string | – | A separate charge sensor; `battery_entity` is then the discharge alone |
@@ -1363,7 +1389,7 @@ paused) when `animation: "off"` or `prefers-reduced-motion` is active.
 | `self_sufficiency_color` | string | `#81c784` | Self-sufficiency bar color |
 | `text_color` / `secondary_text_color` | string | theme default | Name / node labels |
 | `card_background` | string | glass/solid background | Card background |
-| `animation` | `auto` \| `on` \| `off` | `auto` | Flow-dot animation; `auto`/`on` respect `prefers-reduced-motion` |
+| `animation` | `auto` \| `on` \| `off` | `auto` | Flow-dot or water-wave animation; `auto`/`on` respect `prefers-reduced-motion` |
 | `glass_background` | boolean | `true` | Frosted glass background |
 | `radius` / `corners` | number / object | `28` | Corner radius, optional per corner |
 

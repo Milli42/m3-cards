@@ -92,7 +92,6 @@ const OWN_LABELS: Record<string, TranslationKey> = {
 export const NO_DETAIL_CARDS: ReadonlySet<string> = new Set([
   "m3-clock-card",
   "m3-detail-card",
-  "m3-energy-flow-card",
   "m3-gauge-card",
   "m3-group-card",
   // Both run their configured action without an entity, so a more-info
@@ -293,7 +292,7 @@ export function renderRadiusCornerFields(params: RadiusCornerFieldsParams): Temp
   `;
 }
 
-export function renderAppearanceSection(params: RadiusCornerFieldsParams): TemplateResult {
+export function renderAppearanceSection(params: RadiusCornerFieldsParams & { showDetailMode?: boolean }): TemplateResult {
   const { hass, language, config, computeLabel } = params;
   const label = withOwnLabels(computeLabel, language);
   const appearanceData = { glass_background: config.glass_background ?? true };
@@ -310,7 +309,7 @@ export function renderAppearanceSection(params: RadiusCornerFieldsParams): Templ
           @value-changed=${params.onValueChanged}
         ></ha-form>
         ${renderRadiusCornerFields(params)}
-        ${renderDetailModeField(params)}
+        ${params.showDetailMode === false ? nothing : renderDetailModeField(params)}
         ${renderHapticsField(params)}
       </div>
     </ha-expansion-panel>
