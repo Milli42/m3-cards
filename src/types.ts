@@ -482,14 +482,18 @@ export interface M3EnergyFlowCardConfig {
   /**
    * `compact`: the nodes side by side in one row, about as tall as a tile,
    * for a half-width slot next to a weather or status card (#54).
+   * `power-station`: direct power readings and battery levels in two rows.
    */
-  layout?: "full" | "compact";
-  /** The header with name and subtitle. Default: on, off for `compact`. */
+  layout?: "full" | "compact" | "power-station";
+  /** The header with name and subtitle. Default: on for `full` only. */
   show_header?: boolean;
   /** A separate charge sensor (positive), e.g. "charged today" in kWh. */
   battery_charge_entity?: string;
-  /** State of charge in %, shown with the battery node. */
+  /** State of charge in %, shown with the battery node or as the combined power station level. */
   battery_soc_entity?: string;
+  /** Individual state-of-charge sensors, only used by the power station layout. */
+  main_battery_soc_entity?: string;
+  extra_battery_soc_entity?: string;
   /**
    * The home's consumption from a sensor of its own, instead of solar plus
    * import minus export and charge.

@@ -82,6 +82,14 @@ const RESOURCE_FUNCTION = /(?:^|[^\w-])(?:-webkit-|-moz-)?(?:url|src|image|image
 // a declaration overrides one instead.
 const STRUCTURAL = /[;{}!\\<>]|\/\*|\*\//;
 
+/** Accept finite numbers and complete decimal strings from rendered templates. */
+export function cssNumber(raw: unknown): number | undefined {
+  const value = typeof raw === "string" ? raw.trim() : raw;
+  const number = typeof value === "string" && /^[+-]?(?:\d+|\d*\.\d+)(?:e[+-]?\d+)?$/i.test(value)
+    ? Number(value) : value;
+  return typeof number === "number" && Number.isFinite(number) ? number : undefined;
+}
+
 /** Longer than any colour, size or gradient this suite writes. */
 const MAX_VALUE_LENGTH = 400;
 

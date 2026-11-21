@@ -1278,6 +1278,32 @@ battery_entity: sensor.battery_power
 battery_soc_entity: sensor.battery_level
 ```
 
+### Compact power station (EcoFlow and similar)
+
+Use `layout: power-station` for a compact two-row view. The top row reads live
+solar input, AC input (including grid charging), and AC output directly from
+your sensors, keeping their reported units. The bottom row shows the combined,
+main, and extra battery percentages from the sensors you pick. No Energy dashboard
+or battery power sensor is required; the card does not estimate battery watts or
+calculate a combined percentage. Zero is shown as zero, and unavailable readings
+are shown as `—`. Unconfigured battery tiles are omitted. This layout does not
+show flow animations or a self-sufficiency estimate.
+
+In the visual editor, choose **Power station: two rows** under Content → Layout,
+then pick your sensors under Entities. Replace the sample entity IDs below with yours.
+The header is hidden by default; set `show_header: true` if you want a title.
+
+```yaml
+type: custom:m3-energy-flow-card
+layout: power-station
+solar_entity: sensor.ecoflow_solar_input
+grid_import_entity: sensor.ecoflow_ac_input
+home_entity: sensor.ecoflow_ac_output
+battery_soc_entity: sensor.ecoflow_combined_battery
+main_battery_soc_entity: sensor.ecoflow_main_battery
+extra_battery_soc_entity: sensor.ecoflow_extra_battery
+```
+
 ### Energy or power
 
 With your own sensors the card follows their unit. Energy sensors (Wh,
@@ -1315,15 +1341,16 @@ paused) when `animation: "off"` or `prefers-reduced-motion` is active.
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `source` | `energy` \| `entities` | `energy` | Data source |
-| `solar_entity` / `grid_import_entity` / `grid_export_entity` / `battery_entity` | string | – | Only for `source: entities`. See [The battery](#the-battery) for the sign of `battery_entity` |
+| `solar_entity` / `grid_import_entity` / `grid_export_entity` / `battery_entity` | string | – | For `source: entities`; `power-station` uses only solar and grid import from this group. See [The battery](#the-battery) for the sign of `battery_entity` |
 | `grid_entity` | string | – | Only for `source: entities` — one signed grid sensor instead of the import/export pair: positive draws from the grid, negative feeds in |
 | `grid_invert` | boolean | `false` | `grid_entity` counts export as positive |
-| `layout` | `full` \| `compact` | `full` | `compact`: the nodes side by side in one row, about as tall as a tile. See [Compact](#compact) |
-| `show_header` | boolean | `true`, `false` for `compact` | The header with name and subtitle |
+| `layout` | `full` \| `compact` \| `power-station` | `full` | `compact`: one row of flow nodes. `power-station`: two rows of direct sensor readings, independent of `source` |
+| `show_header` | boolean | `true` for `full` only | The header with name and subtitle |
 | `battery_invert` | boolean | `false` | `battery_entity` counts charging as positive |
 | `battery_charge_entity` | string | – | A separate charge sensor; `battery_entity` is then the discharge alone |
-| `battery_soc_entity` | string | – | State of charge in %, shown with the battery's name (either source) |
-| `home_entity` | string | – | Only for `source: entities` — the home's consumption from a sensor of its own, instead of calculated |
+| `battery_soc_entity` | string | – | State of charge in %, or the combined battery level in `power-station` |
+| `main_battery_soc_entity` / `extra_battery_soc_entity` | string | – | Individual battery charge percentages in `power-station` |
+| `home_entity` | string | – | Measured consumption for `source: entities`, or measured AC output for `power-station` |
 | `name` | string | "Energy Flow" | Displayed name |
 | `subtitle` | string | "Today", or "Now" for power sensors | Line under the name |
 | `pv_name` / `grid_name` / `home_name` / `battery_name` | string | Solar / Grid / Home / Battery | Node names |

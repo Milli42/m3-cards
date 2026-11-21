@@ -1,5 +1,6 @@
 import type { CornerRadiusConfig, HvacMode, WeatherChipType, ClimateOverviewTempThresholds } from "./types";
 import { RADIUS, HEIGHT, SPACING, DURATION_MS, PALETTE } from "./shared/tokens";
+import { cssNumber } from "./shared/css-safe";
 import {
   LEVEL_EDGE_INSET,
   LEVEL_HANDLE_HEIGHT,
@@ -112,16 +113,16 @@ export const EXPRESSIVE_PILL_MORPH_MS = DURATION_MS.roll;
 
 // Resolves a base radius + optional per-corner overrides into a CSS
 // border-radius value ("TL TR BR BL"), enabling Material 3 Expressive-style
-// asymmetric shapes.
+// asymmetric shapes. Invalid template results fall back to the base or default.
 export function resolveCornerRadius(
-  base: number,
+  base: number | undefined,
   corners?: CornerRadiusConfig,
+  defaultRadius = RADIUS.card,
 ): string {
-  const tl = corners?.top_left ?? base;
-  const tr = corners?.top_right ?? base;
-  const br = corners?.bottom_right ?? base;
-  const bl = corners?.bottom_left ?? base;
-  return `${tl}px ${tr}px ${br}px ${bl}px`;
+  const radius = Math.max(0, cssNumber(base) ?? cssNumber(defaultRadius) ?? RADIUS.card);
+  return [corners?.top_left, corners?.top_right, corners?.bottom_right, corners?.bottom_left]
+    .map((corner) => `${Math.max(0, cssNumber(corner) ?? radius)}px`)
+    .join(" ");
 }
 
 export const DEFAULT_MODE_COLORS: Record<HvacMode, string> = {
