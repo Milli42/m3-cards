@@ -38,6 +38,7 @@ import {
   resolveCommonColors,
   tintOn, foregroundOn, fillColor, foregroundColor,
 } from "./shared/color-config";
+import { cssNumber } from "./shared/css-safe";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { renderCardHeader, cardHeaderStyles } from "./shared/card-header";
 import { shouldAnimate } from "./shared/animation";
@@ -135,7 +136,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
 
   private _refreshTimer?: number;
   private _lastFetchKey?: string;
-  private _fetchInFlight = false;
+  private _energyRequest?: symbol;
 
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     await import("./m3-energy-flow-card-editor");
@@ -162,14 +163,17 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
       flow_speed: "normal",
       ...config,
     };
+    this._invalidateEnergyRequestForDirectMode();
   }
 
   public getCardSize(): number {
-    return 4;
+    return this._config?.layout === "power-station" ? 2 : 4;
   }
 
   public getGridOptions(): LovelaceGridOptions {
-    if (this._config?.layout === "compact") return { columns: 6, rows: "auto", min_columns: 3 };
+    if (this._config?.layout === "compact" || this._config?.layout === "power-station") {
+      return { columns: 6, rows: "auto", min_columns: 3 };
+    }
     return {
       columns: "full",
       rows: "auto",
@@ -206,11 +210,21 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     this._maybeFetch();
   }
 
+  private get _usesEnergyDashboard(): boolean {
+    return !!this._config && this._config.source !== "entities" && this._config.layout !== "power-station";
+  }
+
+  private _invalidateEnergyRequestForDirectMode(): void {
+    if (!this._usesEnergyDashboard && this._energyRequest) {
+      this._energyRequest = undefined;
+      this._lastFetchKey = undefined;
+    }
+  }
+
   private _maybeFetch(): void {
-    if (!this.hass || !this._config) return;
     // Own sensors are read as they change (willUpdate); only the Energy
     // dashboard's statistics are fetched, on the refresh timer.
-    if (this._config.source === "entities") return;
+    if (!this.hass || !this._usesEnergyDashboard) return;
     if (this._lastFetchKey === "energy") return;
     this._lastFetchKey = "energy";
     this._fetchData();
@@ -218,7 +232,9 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
 
   protected willUpdate(changed: PropertyValues): void {
     super.willUpdate?.(changed);
-    if (this._config?.source === "entities" && (changed.has("hass") || changed.has("_config"))) this._readEntities();
+    this._invalidateEnergyRequestForDirectMode();
+    if (this._config?.source === "entities" && this._config.layout !== "power-station" &&
+      (changed.has("hass") || changed.has("_config"))) this._readEntities();
   }
 
   /**
@@ -286,43 +302,42 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
   }
 
   private async _fetchData(): Promise<void> {
-    if (!this.hass || !this._config || this._fetchInFlight) return;
-    this._fetchInFlight = true;
-    const config = this._config;
+    const hass = this.hass;
+    if (!hass || this._energyRequest) return;
+    const request = this._energyRequest = Symbol();
+    const isCurrent = () => this._energyRequest === request;
     try {
-      if (config.source === "entities") {
-        this._readEntities();
+      this._measure = "energy";
+      const dash = await getEnergyDashboardEntities(hass);
+      if (!isCurrent()) return;
+      if (!dash) {
+        this._noEnergyDashboard = true;
       } else {
-        this._measure = "energy";
-        const dash = await getEnergyDashboardEntities(this.hass);
-        if (!dash) {
-          this._noEnergyDashboard = true;
-        } else {
-          this._noEnergyDashboard = false;
-          this._hasSolar = dash.solarFrom.length > 0;
-          this._hasBattery = dash.hasBattery;
-          const [solar, gridImport, gridExport, batteryCharge, batteryDischarge] =
-            await Promise.all([
-              fetchTodayChangeSum(this.hass, dash.solarFrom),
-              fetchTodayChangeSum(this.hass, dash.gridFrom),
-              fetchTodayChangeSum(this.hass, dash.gridTo),
-              dash.hasBattery ? fetchTodayChangeSum(this.hass, dash.batteryTo) : Promise.resolve(0),
-              dash.hasBattery
-                ? fetchTodayChangeSum(this.hass, dash.batteryFrom)
-                : Promise.resolve(0),
-            ]);
-          this._solarTotal = solar;
-          this._gridImport = gridImport;
-          this._gridExport = gridExport;
-          this._batteryCharge = batteryCharge;
-          this._batteryDischarge = batteryDischarge;
-        }
+        const [solar, gridImport, gridExport, batteryCharge, batteryDischarge] =
+          await Promise.all([
+            fetchTodayChangeSum(hass, dash.solarFrom),
+            fetchTodayChangeSum(hass, dash.gridFrom),
+            fetchTodayChangeSum(hass, dash.gridTo),
+            dash.hasBattery ? fetchTodayChangeSum(hass, dash.batteryTo) : Promise.resolve(0),
+            dash.hasBattery ? fetchTodayChangeSum(hass, dash.batteryFrom) : Promise.resolve(0),
+          ]);
+        if (!isCurrent()) return;
+        this._noEnergyDashboard = false;
+        this._hasSolar = dash.solarFrom.length > 0;
+        this._hasBattery = dash.hasBattery;
+        this._solarTotal = solar;
+        this._gridImport = gridImport;
+        this._gridExport = gridExport;
+        this._batteryCharge = batteryCharge;
+        this._batteryDischarge = batteryDischarge;
       }
     } catch (e) {
-      console.error("m3-energy-flow-card: failed to load energy data", e);
+      if (isCurrent()) console.error("m3-energy-flow-card: failed to load energy data", e);
     } finally {
-      this._loading = false;
-      this._fetchInFlight = false;
+      if (isCurrent()) {
+        this._loading = false;
+        this._energyRequest = undefined;
+      }
     }
   }
 
@@ -508,6 +523,8 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
       this._config?.battery_entity,
       this._config?.battery_charge_entity,
       this._config?.battery_soc_entity,
+      this._config?.main_battery_soc_entity,
+      this._config?.extra_battery_soc_entity,
       this._config?.home_entity,
       this._config?.grid_entity,
     ]);
@@ -516,7 +533,8 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
   protected render() {
     if (!this._config || !this.hass) return nothing;
 
-    if (this._config.source !== "entities" && this._noEnergyDashboard) {
+    const station = this._config.layout === "power-station";
+    if (!station && this._config.source !== "entities" && this._noEnergyDashboard) {
       return html`
         <ha-card>
           <div class="card-inner glass">
@@ -528,13 +546,8 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
 
     const name = this._config.name || this._t("flow_default_name");
     const icon = this._config.icon || DEFAULT_FLOW_ICON;
-    const power = this._measure === "power";
+    const power = station || this._measure === "power";
     const subtitle = this._config.subtitle || this._t(power ? "flow_subtitle_now" : "flow_subtitle_today");
-    const largest = Math.max(this._solarTotal, this._gridImport, this._gridExport, this._batteryCharge, this._batteryDischarge);
-    const shownUnit = displayUnit(this._measure, largest, this._config.unit);
-    this._unitDivisor = shownUnit.divisor;
-    this._unitLabel = shownUnit.label;
-
     const pvColor = this._config.pv_color
       ? resolveThemeColor(this._config.pv_color)
       : FLOW_NODE_PV_COLOR;
@@ -555,9 +568,39 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     );
 
     const radius = resolveCornerRadius(
-      this._config.radius ?? DEFAULT_FLOW_RADIUS,
+      this._config.radius,
       this._config.corners,
+      DEFAULT_FLOW_RADIUS,
     );
+
+    // The glyph sits on this well, not on the card, so its contrast has to be
+    // measured against the well.
+    const iconWellCss = tintOn(this, textColorCss, this._config.text_opacity, 12);
+    const cssVars = buildCssVars({
+      "m3p-accent": homeColor,
+      "m3p-icon-color": foregroundOn(textColorCss, iconWellCss),
+      "m3p-icon-bg": iconWellCss,
+      "m3p-text": textColorCss,
+      "m3p-secondary-text": secondaryTextColorCss,
+    });
+
+    const compact = this._config.layout === "compact";
+    const showHeader = this._config.show_header ?? !(compact || station);
+    if (station) {
+      return html`
+        <ha-card style=${`${cssVars} border-radius: ${radius};`}>
+          <div class="card-inner station ${glassCardClass(this._config.glass_background)}"
+            style=${`border-radius: ${radius};${cardBackgroundCss ? ` background: ${cardBackgroundCss};` : ""}`}>
+            ${showHeader ? renderCardHeader({ icon, name, subtitle }) : nothing}
+            ${this._renderPowerStation({ pv: pvColor, grid: gridColor, home: homeColor, battery: batteryColor })}
+          </div>
+        </ha-card>
+      `;
+    }
+    const largest = Math.max(this._solarTotal, this._gridImport, this._gridExport, this._batteryCharge, this._batteryDischarge);
+    const shownUnit = displayUnit(this._measure, largest, this._config.unit);
+    this._unitDivisor = shownUnit.divisor;
+    this._unitLabel = shownUnit.label;
 
     const showBattery =
       this._config.show_battery === "always"
@@ -580,20 +623,6 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
 
     const animate = shouldAnimate(this._config.animation);
     const dotDuration = FLOW_DOT_DURATION_MS[this._config.flow_speed ?? "normal"];
-
-    // The glyph sits on this well, not on the card, so its contrast has to be
-    // measured against the well.
-    const iconWellCss = tintOn(this, textColorCss, this._config.text_opacity, 12);
-    const cssVars = buildCssVars({
-      "m3p-accent": homeColor,
-      "m3p-icon-color": foregroundOn(textColorCss, iconWellCss),
-      "m3p-icon-bg": iconWellCss,
-      "m3p-text": textColorCss,
-      "m3p-secondary-text": secondaryTextColorCss,
-    });
-
-    const compact = this._config.layout === "compact";
-    const showHeader = this._config.show_header ?? !compact;
     if (compact) {
       return html`
         <ha-card style=${`${cssVars} border-radius: ${radius};`}>
@@ -632,7 +661,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
               ${flows.length > 1
                 ? svg`<circle class="junction-dot" cx=${PV_POS.x} cy=${SPLIT_BEND_Y} r="3"></circle>`
                 : nothing}
-              ${nodes.map((n) => this._renderNode(n, this._config?.node_tint_opacity))}
+              ${nodes.map((n) => this._renderNode(n))}
             </svg>
           </div>
 
@@ -656,6 +685,53 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
             : nothing}
         </div>
       </ha-card>
+    `;
+  }
+
+  private _nodeTint(color: string, defaultPercent: number): string {
+    const opacity = cssNumber(this._config?.node_tint_opacity);
+    return tintOn(this, color, opacity === undefined ? undefined : Math.max(0, Math.min(100, opacity)), defaultPercent);
+  }
+
+  private _renderPowerStation(colors: { pv: string; grid: string; home: string; battery: string }) {
+    const c = this._config!;
+    const tile = (id: string | undefined, label: string, icon: string, color: string, battery = false) => {
+      const st = id ? this.hass?.states[id] : undefined;
+      const raw = st?.state.trim();
+      const reading = raw ? Number(raw) : NaN;
+      let text = "—";
+      if (Number.isFinite(reading) && (!battery || (reading >= 0 && reading <= 100))) {
+        const number = formatNumber(this._language, reading, { maximumFractionDigits: battery ? 1 : 3 });
+        const unit = st?.attributes.unit_of_measurement;
+        text = battery ? `${number}%` : typeof unit === "string" && unit ? `${number} ${unit}` : number;
+      }
+      const tint = this._nodeTint(color, 18);
+      return html`
+        <div class="ctile station-tile" title=${`${label}: ${text}`}>
+          <span class="cicon" style=${`background-color: ${tint}; color: ${foregroundOn(color, tint)};`}>
+            <ha-icon icon=${icon} aria-hidden="true"></ha-icon>
+          </span>
+          <span class="cname">${label}</span>
+          <span class="cvalue">${text}</span>
+        </div>
+      `;
+    };
+    const batteries = [
+      [c.battery_soc_entity, c.battery_name || this._t("flow_station_combined"), "mdi:battery-high"],
+      [c.main_battery_soc_entity, this._t("flow_station_main"), "mdi:battery"],
+      [c.extra_battery_soc_entity, this._t("flow_station_extra"), "mdi:battery-plus-outline"],
+    ] as const;
+    return html`
+      <div class="station-row">
+        ${tile(c.solar_entity, c.pv_name || this._t("flow_station_solar"), "mdi:white-balance-sunny", colors.pv)}
+        ${tile(c.grid_import_entity, c.grid_name || this._t("flow_station_ac_in"), "mdi:power-plug", colors.grid)}
+        ${tile(c.home_entity, c.home_name || this._t("flow_station_ac_out"), "mdi:power-socket", colors.home)}
+      </div>
+      ${c.show_battery !== "never" && batteries.some(([id]) => id) ? html`
+        <div class="station-row">
+          ${batteries.map(([id, label, icon]) => id ? tile(id, label, icon, colors.battery, true) : nothing)}
+        </div>
+      ` : nothing}
     `;
   }
 
@@ -740,7 +816,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         style=${`grid-template-columns: repeat(${tiles.length}, minmax(0, 1fr)); --flow-self: ${selfColor};`}
       >
         ${tiles.map((t) => {
-          const fill = tintOn(this, t.color, c.node_tint_opacity, t.value > 0 ? 18 : 8);
+          const fill = this._nodeTint(t.color, t.value > 0 ? 18 : 8);
           const arrow = arrowFor(t);
           return html`
             <div
@@ -797,8 +873,8 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     `;
   }
 
-  private _renderNode(node: FlowNodeData, nodeTintOpacity: number | undefined): SVGTemplateResult {
-    const fill = tintOn(this, node.color, nodeTintOpacity, 18);
+  private _renderNode(node: FlowNodeData): SVGTemplateResult {
+    const fill = this._nodeTint(node.color, 18);
     return svg`
       <g class="flow-node">
         <rect
@@ -898,6 +974,45 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         font-size: 10px;
       }
 
+      .card-inner.station {
+        gap: 0;
+        padding: var(--m3-group-padding, 6px);
+      }
+      .station .m3-header {
+        margin-bottom: 6px;
+      }
+      .station-row {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: 4px;
+      }
+      .station-row + .station-row {
+        margin-top: 4px;
+        padding-top: 4px;
+        border-top: 1px solid color-mix(in srgb, var(--m3p-secondary-text) 18%, transparent);
+      }
+      .station-tile.ctile {
+        gap: 1px;
+        padding: 2px 1px;
+        text-align: center;
+      }
+      .station-tile .cicon {
+        width: 20px;
+        height: 20px;
+        border-radius: 7px;
+        --mdc-icon-size: 14px;
+        margin-bottom: 0;
+      }
+      .station-tile .cvalue {
+        font-size: 14px;
+      }
+      .station-tile .cname,
+      .station-tile .cvalue {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
       /* layout: compact (#54) */
       .compact-row {
         display: grid;
