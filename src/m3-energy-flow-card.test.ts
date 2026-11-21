@@ -52,6 +52,62 @@ async function createCard(configOverride = config) {
   return card;
 }
 
+describe("Energy Flow water layout", () => {
+  const water: M3EnergyFlowCardConfig = { type: config.type, layout: "water", water_entity: "sensor.flow", water_max: 8 };
+  beforeEach(() => vi.stubGlobal("window", new EventTarget()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uses the flow sensor directly, sizes the gauge, and opens the sensor history without Energy requests", async () => {
+    const card = await createCard(water);
+    card.hass = hass({ flow: ["2.4", "gal/min"] });
+    card.onUpdate();
+    expect(card.hass.callWS).not.toHaveBeenCalled();
+    expect(card.values()).toEqual(expect.arrayContaining(["2.4", "gal/min", "Flowing", "width: 30%", "water-moving"]));
+    const dispatch = vi.spyOn(card, "dispatchEvent");
+    card.values().find((v): v is () => void => typeof v === "function")?.();
+    expect(dispatch.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([{ entityId: "sensor.flow" }]);
+    expect(card.getCardSize()).toBe(2);
+    expect(card.getGridOptions().columns).toBe(6);
+  });
+
+  it.each([
+    ["0", "0", "No flow", "width: 0%"],
+    ["unavailable", "—", "Unavailable", "width: 0%"],
+    ["-1", "—", "Unavailable", "width: 0%"],
+  ])("keeps the gauge still when the reading is %s", async (state, text, status, width) => {
+    const card = await createCard(water);
+    const before = hass({ flow: ["3", "L/min"] });
+    card.hass = before;
+    card.hass = hass({ flow: [state, "L/min"] });
+    expect(card.acceptsHass(before)).toBe(true);
+    expect(card.values()).toEqual(expect.arrayContaining([text, status, width]));
+    expect(card.values()).not.toContain("water-moving");
+  });
+
+  it("offers only the water sensor, scale and animation controls for the water layout", async () => {
+    const { M3EnergyFlowCardEditor } = await import("./m3-energy-flow-card-editor");
+    vi.stubGlobal("document", { documentElement: { lang: "en" } });
+    class TestEditor extends M3EnergyFlowCardEditor {
+      values() { return templateValues(super.render()); }
+    }
+    const editor = new TestEditor();
+    editor.hass = hass({});
+    editor.setConfig(water);
+    const names = editor.values().flatMap(v => v && typeof v === "object" && "name" in v && "selector" in v ? [v.name] : []);
+    expect(names).toEqual(expect.arrayContaining(["layout", "water_entity", "water_max", "animation"]));
+    for (const omitted of ["source", "solar_entity", "show_header", "show_self_sufficiency", "flow_speed"]) {
+      expect(names).not.toContain(omitted);
+    }
+  });
+
+  it("caps the gauge but not the reading and allows motion to be disabled", async () => {
+    const card = await createCard({ ...water, animation: "off" });
+    card.hass = hass({ flow: ["12.3", "L/min"] });
+    expect(card.values()).toEqual(expect.arrayContaining(["12.3", "L/min", "Flowing", "width: 100%"]));
+    expect(card.values()).not.toContain("water-moving");
+  });
+});
+
 describe("Energy Flow power station layout", () => {
   beforeEach(() => vi.stubGlobal("window", new EventTarget()));
   afterEach(() => vi.unstubAllGlobals());
@@ -80,6 +136,18 @@ describe("Energy Flow power station layout", () => {
     card.hass = { ...before, states: { ...before.states, "sensor.main": { ...before.states["sensor.main"], state: "84.4" } } };
     expect(card.acceptsHass(before)).toBe(true);
     expect(card.values()).toContain("84.4%");
+  });
+
+  it("opens native More info for each EcoFlow sensor, including an unavailable one", async () => {
+    const card = await createCard();
+    card.hass = hass({ solar: ["0", "W"], ac_in: ["unavailable", "W"], ac_out: ["15", "W"], combined: ["91.6", "%"], main: ["83.2", "%"], extra: ["100", "%"] });
+    const dispatch = vi.spyOn(card, "dispatchEvent");
+    const handlers = card.values().filter((v): v is () => void => typeof v === "function");
+    expect(handlers).toHaveLength(6);
+    handlers.forEach(handler => handler());
+    expect(dispatch.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual(
+      ["solar", "ac_in", "ac_out", "combined", "main", "extra"].map(key => ({ entityId: `sensor.${key}` })),
+    );
   });
 
   it("does not start recorder requests when Energy preferences resolve in power station mode", async () => {
