@@ -227,8 +227,28 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
   }
 
   private _sourceSchema(): SchemaEntry[] {
-    const schema: SchemaEntry[] = [
-      {
+    const schema: SchemaEntry[] = [{
+      name: "period",
+      selector: {
+        select: {
+          mode: "dropdown",
+          options: [
+            { value: "live", label: this._t("top_consumers_period_live") },
+            { value: "today", label: this._t("editor_top_consumers_period_today") },
+            { value: "yesterday", label: this._t("editor_top_consumers_period_yesterday") },
+            { value: "week", label: this._t("editor_top_consumers_period_week") },
+            { value: "month", label: this._t("editor_top_consumers_period_month") },
+          ],
+        },
+      },
+    }];
+    if (this._config?.period === "live") {
+      schema.push(
+        { name: "power_entity", selector: { entity: { domain: "sensor" } } },
+        { name: "power_entities_flat", selector: { entity: { domain: "sensor", multiple: true } } },
+      );
+    } else {
+      schema.push({
         name: "source",
         selector: {
           select: {
@@ -239,28 +259,14 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
             ],
           },
         },
-      },
-    ];
-    if (this._config?.source === "entities") {
-      schema.push({
-        name: "entities_flat",
-        selector: { entity: { domain: "sensor", device_class: "energy", multiple: true } },
       });
+      if (this._config?.source === "entities") {
+        schema.push({
+          name: "entities_flat",
+          selector: { entity: { domain: "sensor", device_class: "energy", multiple: true } },
+        });
+      }
     }
-    schema.push({
-      name: "period",
-      selector: {
-        select: {
-          mode: "dropdown",
-          options: [
-            { value: "today", label: this._t("editor_top_consumers_period_today") },
-            { value: "yesterday", label: this._t("editor_top_consumers_period_yesterday") },
-            { value: "week", label: this._t("editor_top_consumers_period_week") },
-            { value: "month", label: this._t("editor_top_consumers_period_month") },
-          ],
-        },
-      },
-    });
     return schema;
   }
 
@@ -295,7 +301,7 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
           },
         },
       },
-    ];
+    ].filter((field) => this._config?.period !== "live" || field.name !== "unit_mode");
   }
 
   private _priceSchema(): SchemaEntry[] {
@@ -374,6 +380,8 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
       source: "editor_top_consumers_source",
       entities_flat: "editor_top_consumers_entities",
       period: "editor_top_consumers_period",
+      power_entity: "editor_top_consumers_power_entity",
+      power_entities_flat: "editor_top_consumers_power_entities",
       name: "editor_name",
       icon: "editor_icon",
       subtitle: "editor_energy_subtitle",
@@ -428,6 +436,16 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
   private _paletteChanged(values: string[]): void {
     if (!this._config) return;
     this._config = { ...this._config, palette: values };
+    fireEvent(this, "config-changed", { config: this._config });
+  }
+
+  private _sourceChanged(ev: CustomEvent): void {
+    if (!this._config || this._config.period !== "live") return this._valueChanged(ev);
+    const { period, power_entity, power_entities_flat } = ev.detail.value;
+    const existing = new Map((this._config.power_entities ?? []).map((entry) => [entry.entity, entry]));
+    const power_entities = ((power_entities_flat ?? []) as string[]).map((id) => existing.get(id) ?? { entity: id });
+    const { power_entity: _oldMeter, ...rest } = this._config;
+    this._config = { ...rest, period, ...(power_entity ? { power_entity } : {}), power_entities };
     fireEvent(this, "config-changed", { config: this._config });
   }
 
@@ -508,7 +526,12 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
   protected render() {
     if (!this.hass || !this._config) return nothing;
 
-    const sourceData = {
+    const live = this._config.period === "live";
+    const sourceData = live ? {
+      period: this._config.period,
+      power_entity: this._config.power_entity,
+      power_entities_flat: (this._config.power_entities ?? []).map((entry) => entry.entity),
+    } : {
       source: this._config.source ?? "energy",
       entities_flat: (this._config.entities ?? []).map((e) => e.entity),
       period: this._config.period ?? "today",
@@ -546,8 +569,9 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
               .data=${sourceData}
               .schema=${this._sourceSchema()}
               .computeLabel=${this._computeLabel}
-              @value-changed=${this._valueChanged}
+              @value-changed=${this._sourceChanged}
             ></ha-form>
+            ${live ? html`<div class="hint">${this._t("editor_top_consumers_live_hint")}</div>` : nothing}
           </div>
         </ha-expansion-panel>
 
@@ -564,7 +588,7 @@ export class M3TopConsumersCardEditor extends LitElement implements LovelaceCard
           </div>
         </ha-expansion-panel>
 
-        ${this._config.unit_mode === "cost"
+        ${!live && this._config.unit_mode === "cost"
           ? html`
               <ha-expansion-panel outlined .header=${this._t("editor_cost_price_section")}>
                 <ha-icon slot="leading-icon" icon="mdi:cash-multiple"></ha-icon>

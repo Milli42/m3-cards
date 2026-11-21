@@ -6,6 +6,11 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Added
+
+- **Top Consumers** adds an opt-in Live period with a segmented power gauge,
+  a current device ranking, and an optional whole-home power reading.
+
 ## [2.16.0] – 2026-11-19
 
 ### Added

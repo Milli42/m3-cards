@@ -670,7 +670,7 @@ export interface M3PowerSummaryCardConfig extends DetailModeConfig {
   card_version?: string;
 }
 
-export type TopConsumersPeriod = "today" | "yesterday" | "week" | "month";
+export type TopConsumersPeriod = "live" | "today" | "yesterday" | "week" | "month";
 export type TopConsumersRestMode = "collapse" | "hide" | "show_all";
 export type TopConsumersSource = "energy" | "entities";
 
@@ -693,6 +693,8 @@ export interface M3TopConsumersCardConfig extends PricingConfig, NotifyConfigBas
   source?: TopConsumersSource;
   entities?: TopConsumerEntityConfig[];
   period?: TopConsumersPeriod;
+  power_entity?: string;
+  power_entities?: TopConsumerEntityConfig[];
   top_count?: number;
   rest_mode?: TopConsumersRestMode;
   name_strip?: string[];

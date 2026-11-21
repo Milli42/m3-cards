@@ -245,6 +245,8 @@ implementiert sind. Ein Fehlschlag hier betrifft potenziell alle Karten gleichze
 | Test | Schritte | Erwartung |
 |---|---|---|
 | Zeiträume | `today`/`yesterday`/`week`/`month` durchklicken | Ranking und Summen aktualisieren sich korrekt pro Zeitraum |
+| Live-Leistung | `period: live` wählen, W- und kW-Sensoren konfigurieren und Last ändern | Sortierung und farbige Anzeige aktualisieren sich ohne Recorder-Anfrage |
+| Live-Gesamtleistung | `power_entity` konfigurieren, entfernen oder auf `unavailable` setzen | Restleistung nur bei gültiger Messung; sonst Anteile der erfassten Geräte mit passender Beschriftung |
 | `rest_mode: "collapse"` | Mehr Geräte als `top_count` | „N weitere“-Button mit FLIP-Animation beim Auf-/Zuklappen |
 | `unit_mode: "cost"` | Mit `price_source` konfiguriert | Ranking sortiert nach Kosten statt kWh, Währungsformat korrekt |
 | `name_strip` | Entitätsnamen mit Suffix wie „ Steckdose“ | Suffix wird im Zeilennamen entfernt |

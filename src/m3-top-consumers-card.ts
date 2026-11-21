@@ -35,7 +35,7 @@ import {
   resolveCornerRadius,
   NEW_CARD_ACCENT,
 } from "./const";
-import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, tintInk, foregroundOn , foregroundVars} from "./shared/color-config";
+import { resolveThemeColor, buildCssVars, resolveCommonColors, tintOn, tintInk, foregroundOn, foregroundVars, fillColor} from "./shared/color-config";
 import { glassCardStyles, glassCardClass } from "./shared/glass-card";
 import { renderCardHeader, cardHeaderStyles } from "./shared/card-header";
 import { shouldAnimate, STANDARD_EASING } from "./shared/animation";
@@ -49,6 +49,9 @@ import { formatNumber } from "./shared/formatting";
 import { discoveryChangeMatters } from "./shared/should-update";
 import { TemplatedCard } from "./shared/templated-card";
 import { openEntityDetail } from "./shared/entity-detail";
+import { liveConsumers } from "./shared/live-consumers";
+import { displayUnit } from "./shared/energy-flow-units";
+import { cssValue } from "./shared/css-safe";
 
 console.info(
   `%c M3-TOP-CONSUMERS-CARD %c v${CARD_VERSION} `,
@@ -64,11 +67,18 @@ interface ConsumerRow {
   name: string;
   icon: string;
   color: string;
-  kwh: number;
+  value: number;
   cost?: number;
 }
 
-function periodWindow(period: TopConsumersPeriod): { start: Date; end: Date; granularity: "hour" | "day" } {
+interface HistoricalConsumption {
+  key: string;
+  consumption: Map<string, number>;
+  noDeviceSection?: boolean;
+  price?: number;
+}
+
+function periodWindow(period: Exclude<TopConsumersPeriod, "live">): { start: Date; end: Date; granularity: "hour" | "day" } {
   const now = new Date();
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
@@ -107,11 +117,7 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
 
   @state() private _config?: M3TopConsumersCardConfig;
   @state() private _expanded = false;
-  @state() private _consumption = new Map<string, number>();
-  @state() private _noDeviceSection = false;
-  @state() private _price?: number;
-  @state() private _noPriceConfigured = false;
-
+  @state() private _history?: HistoricalConsumption;
 
   // The row wash. Shared by render() (which publishes it as a variable) and by
   // the row builders, which need the resolved value to measure their ink.
@@ -179,6 +185,13 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
     });
   }
 
+  private _formatValue(value: number, costMode = false, currency = DEFAULT_COST_CURRENCY): string {
+    if (costMode) return formatCurrency(value, currency, this._language);
+    if (this._config?.period !== "live") return this._formatKwh(value);
+    const { label, divisor } = displayUnit("power", value);
+    return `${formatNumber(this._language, value / divisor, { maximumFractionDigits: 2 })} ${label}`;
+  }
+
   public connectedCallback(): void {
     super.connectedCallback();
     this._refreshTimer = window.setInterval(() => {
@@ -210,91 +223,115 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
     }
   }
 
-  private _maybeFetch(): void {
-    if (!this.hass || !this._config) return;
-    const key = JSON.stringify({
-      source: this._config.source,
-      entities: this._config.entities?.map((e) => e.entity),
-      period: this._config.period,
-      unitMode: this._config.unit_mode,
-      priceSource: this._config.price_source,
-      priceEntity: this._config.price_entity,
-      price: this._config.price,
+  private _historyKey(config = this._config, start?: Date): string | undefined {
+    if (!config || config.period === "live") return undefined;
+    return JSON.stringify({
+      source: config.source,
+      entities: config.entities?.map((e) => e.entity),
+      period: config.period,
+      start: (start ?? periodWindow(config.period ?? "today").start).getTime(),
+      unitMode: config.unit_mode,
+      priceSource: config.price_source,
+      priceEntity: config.price_entity,
+      price: config.price,
+      priceUnit: config.price_unit,
     });
-    if (key === this._lastFetchKey) return;
-    this._lastFetchKey = key;
-    this._fetchData();
   }
 
-  private async _fetchData(): Promise<void> {
-    if (!this.hass || this._fetchInFlight) return;
+  private get _currentHistory(): HistoricalConsumption | undefined {
+    return this._history?.key === this._historyKey() ? this._history : undefined;
+  }
+
+  private _maybeFetch(): void {
+    const config = this._config;
+    if (!this.hass || !config || config.period === "live" || this._fetchInFlight) return;
+    const range = periodWindow(config.period ?? "today");
+    const key = this._historyKey(config, range.start);
+    if (key === undefined || key === this._lastFetchKey) return;
+    this._lastFetchKey = key;
+    void this._fetchData(this.hass, config, range, key);
+  }
+
+  private async _fetchData(
+    hass: HomeAssistant,
+    config: M3TopConsumersCardConfig,
+    { start, end, granularity }: ReturnType<typeof periodWindow>,
+    key: string,
+  ): Promise<void> {
     this._fetchInFlight = true;
     try {
       let entityIds: string[];
-      if (this._config!.source === "entities") {
-        entityIds = (this._config!.entities ?? []).map((e) => e.entity);
-        this._noDeviceSection = false;
+      if (config.source === "entities") {
+        entityIds = (config.entities ?? []).map((e) => e.entity);
       } else {
-        const devices = await getEnergyDeviceEntities(this.hass);
+        const devices = await getEnergyDeviceEntities(hass);
         if (!devices) {
-          this._noDeviceSection = true;
-          this._consumption = new Map();
+          if (this._historyKey() === key) this._history = { key, consumption: new Map(), noDeviceSection: true };
           return;
         }
-        this._noDeviceSection = false;
         entityIds = devices;
       }
-      const { start, end, granularity } = periodWindow(this._config!.period ?? "today");
-      this._consumption = await fetchPeriodChangeByEntity(this.hass, entityIds, start, end, granularity);
-
-      if (this._config!.unit_mode === "cost") {
-        this._price = await resolveEffectivePrice(this.hass, this._config!, start, end);
-        this._noPriceConfigured = this._price === undefined;
-      } else {
-        this._noPriceConfigured = false;
+      if (this._historyKey() !== key) return;
+      const consumption = await fetchPeriodChangeByEntity(hass, entityIds, start, end, granularity);
+      if (this._historyKey() !== key) return;
+      const price = config.unit_mode === "cost"
+        ? await resolveEffectivePrice(hass, config, start, end, () => this._historyKey() === key)
+        : undefined;
+      if (price === null) {
+        this._lastFetchKey = undefined;
+        return;
       }
+      if (this._historyKey() === key) this._history = { key, consumption, price };
     } catch (e) {
       console.error("m3-top-consumers-card: failed to load consumption data", e);
     } finally {
       this._fetchInFlight = false;
+      if (this._historyKey() !== key && this._lastFetchKey === key) this._lastFetchKey = undefined;
+      // Retry if the editor changed the requested period during the fetch.
+      this._maybeFetch();
     }
   }
 
   private _sourceEntities(): TopConsumerEntityConfig[] {
+    if (this._config?.period === "live") return this._config.power_entities ?? [];
     if (this._config?.source === "entities") return this._config.entities ?? [];
-    return Array.from(this._consumption.keys()).map((entity) => ({ entity }));
+    return Array.from(this._currentHistory?.consumption.keys() ?? []).map((entity) => ({ entity }));
   }
 
-  private _buildRows(): ConsumerRow[] {
+  private _buildRows(live?: ReturnType<typeof liveConsumers>): ConsumerRow[] {
     if (!this.hass || !this._config) return [];
     const nameStrip = this._config.name_strip ?? DEFAULT_TOP_CONSUMERS_NAME_STRIP;
     const palette = this._config.palette?.length ? this._config.palette : DEFAULT_TOP_CONSUMERS_PALETTE;
 
-    const costMode = this._config.unit_mode === "cost" && this._price !== undefined;
+    const history = live ? undefined : this._currentHistory;
+    const price = this._config.unit_mode === "cost" ? history?.price : undefined;
+    const readings = live?.devices ?? history?.consumption;
+    const seen = new Set<string>();
 
     const rows = this._sourceEntities()
       .map((entry, index): ConsumerRow | undefined => {
-        const kwh = this._consumption.get(entry.entity) ?? 0;
-        if (kwh <= 0) return undefined;
+        const value = readings?.get(entry.entity) ?? 0;
+        if (value <= 0 || (live && seen.has(entry.entity))) return undefined;
+        if (live) seen.add(entry.entity);
         const state = this.hass!.states[entry.entity];
         const rawName = entry.name || state?.attributes.friendly_name || entry.entity;
         const name = entry.name ? rawName : cleanName(rawName, nameStrip);
-        const color = entry.color
-          ? resolveThemeColor(entry.color)
-          : palette[index % palette.length];
+        const color = (entry.color ? resolveThemeColor(entry.color) : undefined)
+          ?? cssValue(palette[index % palette.length])
+          ?? DEFAULT_TOP_CONSUMERS_PALETTE[index % DEFAULT_TOP_CONSUMERS_PALETTE.length];
         return {
           key: entry.entity,
           entity: entry.entity,
           name,
           icon: entry.icon || state?.attributes.icon || "mdi:power-plug",
           color,
-          kwh,
-          cost: costMode ? kwh * this._price! : undefined,
+          value,
+          cost: price !== undefined ? value * price : undefined,
         };
       })
       .filter((r): r is ConsumerRow => !!r);
 
-    rows.sort((a, b) => (costMode ? (b.cost ?? 0) - (a.cost ?? 0) : b.kwh - a.kwh));
+    rows.sort((a, b) => (price !== undefined ? (b.cost ?? 0) - (a.cost ?? 0) : b.value - a.value));
     return rows;
   }
 
@@ -304,12 +341,15 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
 
   protected shouldUpdate(changed: PropertyValues): boolean {
     // In "energy" mode the rows come from fetched statistics rather than from
-    // states, so _consumption is what the card actually reads; _sourceEntities
+    // states, so the historical snapshot provides the actual amounts; _sourceEntities
     // covers both that and the configured list.
     return discoveryChangeMatters(
       changed,
       this.hass,
-      this._sourceEntities().map((e) => e.entity),
+      [
+        ...this._sourceEntities().map((e) => e.entity),
+        this._config?.period === "live" ? this._config.power_entity : undefined,
+      ],
     );
   }
 
@@ -331,7 +371,10 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
     const name = this._config.name || this._t("top_consumers_default_name");
     const icon = this._config.icon || DEFAULT_TOP_CONSUMERS_ICON;
     const periodLabel = this._t(`top_consumers_period_${this._config.period ?? "today"}` as TranslationKey);
-    const costMode = this._config.unit_mode === "cost";
+    const live = this._config.period === "live"
+      ? liveConsumers(this.hass.states, this._sourceEntities().map((e) => e.entity), this._config.power_entity)
+      : undefined;
+    const costMode = !live && this._config.unit_mode === "cost";
     const currency = this._config.currency || DEFAULT_COST_CURRENCY;
 
     // The glyph sits on this well, not on the card, so its contrast has to be
@@ -351,7 +394,8 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
       }),
     });
 
-    if (this._noDeviceSection) {
+    const history = live ? undefined : this._currentHistory;
+    if (history?.noDeviceSection) {
       return html`
         <ha-card style=${`${cssVars} border-radius: ${radius};`}>
           <div
@@ -368,7 +412,7 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
       `;
     }
 
-    if (costMode && this._noPriceConfigured) {
+    if (costMode && history && history.price === undefined) {
       return html`
         <ha-card style=${`${cssVars} border-radius: ${radius};`}>
           <div
@@ -387,17 +431,19 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
       `;
     }
 
-    const allRows = this._buildRows();
+    const allRows = this._buildRows(live);
     const topCount = this._config.top_count ?? DEFAULT_TOP_CONSUMERS_COUNT;
     const restMode = this._config.rest_mode ?? "collapse";
 
     const visibleRows = restMode === "show_all" ? allRows : allRows.slice(0, topCount);
     const restRows = restMode === "show_all" ? [] : allRows.slice(topCount);
 
-    const total = allRows.reduce((sum, r) => sum + (costMode ? (r.cost ?? 0) : r.kwh), 0);
-    const maxValue = Math.max(...visibleRows.map((r) => (costMode ? (r.cost ?? 0) : r.kwh)), costMode ? 0.01 : 1);
-    const restSum = restRows.reduce((sum, r) => sum + (costMode ? (r.cost ?? 0) : r.kwh), 0);
+    const total = allRows.reduce((sum, r) => sum + (costMode ? (r.cost ?? 0) : r.value), 0);
+    const maxValue = Math.max(...visibleRows.map((r) => (costMode ? (r.cost ?? 0) : r.value)), costMode ? 0.01 : 1);
+    const restSum = restRows.reduce((sum, r) => sum + (costMode ? (r.cost ?? 0) : r.value), 0);
 
+    const trackedOnly = !!live && (live.total === undefined || live.exceedsTotal);
+    const liveTotal = live?.total ?? live?.tracked;
     const subtitle =
       this._config.subtitle ||
       `${periodLabel} · ${this._t("top_consumers_device_count").replace("{n}", String(allRows.length))}`;
@@ -412,7 +458,12 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
             icon,
             name,
             subtitle,
-            right: costMode
+            right: live
+              ? html`<div class="total-value">
+                  <div class="total-number">${liveTotal === undefined ? "—" : this._formatValue(liveTotal)}</div>
+                  <div class="total-unit">${this._t(live.total === undefined ? "top_consumers_tracked_power" : "top_consumers_home_power")}</div>
+                </div>`
+              : costMode
               ? html`
                   <div class="total-value">
                     <div class="total-number">${formatCurrency(total, currency, this._language)}</div>
@@ -426,14 +477,16 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
                 `,
           })}
 
+          ${live ? this._renderLiveGauge(live, allRows) : nothing}
+
           ${allRows.length === 0
-            ? html`<div class="empty-state">${this._t("top_consumers_empty").replace("{period}", periodLabel)}</div>`
+            ? html`<div class="empty-state">${live ? this._t("top_consumers_live_empty") : this._t("top_consumers_empty").replace("{period}", periodLabel)}</div>`
             : html`
                 <div class="row-list">
                   ${repeat(
                     visibleRows,
                     (r) => r.key,
-                    (r) => this._renderRow(r, maxValue, total, costMode, currency),
+                    (r) => this._renderRow(r, live?.denominator ?? maxValue, live?.denominator ?? total, costMode, currency, trackedOnly),
                   )}
                 </div>
 
@@ -450,7 +503,7 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
                         <span class="rest-sum"
                           >${costMode
                             ? formatCurrency(restSum, currency, this._language)
-                            : `${this._formatKwh(restSum)} kWh`}</span
+                            : live ? this._formatValue(restSum) : `${this._formatKwh(restSum)} kWh`}</span
                         >
                         <ha-icon class="chevron" icon="mdi:chevron-down"></ha-icon>
                       </button>
@@ -473,19 +526,41 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
     `;
   }
 
+  private _renderLiveGauge(live: ReturnType<typeof liveConsumers>, rows: ConsumerRow[]) {
+    const note = live.untracked > 0
+      ? this._t("top_consumers_untracked_power").replace("{power}", this._formatValue(live.untracked))
+      : live.exceedsTotal
+        ? this._t("top_consumers_power_mismatch")
+        : this._config?.power_entity && live.total === undefined
+          ? this._t("top_consumers_home_unavailable")
+          : "";
+    return html`
+      <div class="live-gauge">
+        <div class="live-track" aria-hidden="true">
+          ${repeat(rows, (r) => r.key, (r) => html`
+            <span class="live-segment" title=${`${r.name}: ${this._formatValue(r.value)}`}
+              style=${`width:${(r.value / live.denominator) * 100}%;background-color:${cssValue(fillColor(this, r.color)) ?? "var(--tc-accent)"};`}></span>
+          `)}
+        </div>
+        ${note ? html`<div class="live-note">${note}</div>` : nothing}
+      </div>
+    `;
+  }
+
   private _renderRow(
     row: ConsumerRow,
     maxValue: number,
     total: number,
     costMode: boolean,
     currency: string,
+    trackedOnly: boolean,
   ) {
-    const rowValue = costMode ? (row.cost ?? 0) : row.kwh;
+    const rowValue = costMode ? (row.cost ?? 0) : row.value;
     const barPct = Math.max(0, Math.min(100, (rowValue / maxValue) * 100));
     const pctOfTotal = total > 0 ? Math.round((rowValue / total) * 100) : 0;
     const subtitle = costMode
-      ? `${this._formatKwh(row.kwh)} kWh · ${pctOfTotal} % ${this._t("top_consumers_of_total_cost")}`
-      : `${pctOfTotal} % ${this._t("top_consumers_of_total")}`;
+      ? `${this._formatKwh(row.value)} kWh · ${pctOfTotal} % ${this._t("top_consumers_of_total_cost")}`
+      : `${pctOfTotal} % ${this._t(trackedOnly ? "top_consumers_of_tracked_power" : "top_consumers_of_total")}`;
     return html`
       <div
         class="row"
@@ -506,14 +581,14 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
           <div class="row-percent">${subtitle}</div>
         </div>
         <div class="row-value" style=${`color: ${foregroundOn(row.color, this._rowSurface(), 4.5)};`}>
-          ${costMode ? formatCurrency(rowValue, currency, this._language) : this._formatKwh(rowValue)}
+          ${this._formatValue(rowValue, costMode, currency)}
         </div>
       </div>
     `;
   }
 
   private _renderCompactRow(row: ConsumerRow, costMode: boolean, currency: string) {
-    const rowValue = costMode ? (row.cost ?? 0) : row.kwh;
+    const rowValue = costMode ? (row.cost ?? 0) : row.value;
     return html`
       <div
         class="row compact"
@@ -530,7 +605,7 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
         </div>
         <div class="row-name">${row.name}</div>
         <div class="row-value" style=${`color: ${foregroundOn(row.color, this._rowSurface(), 4.5)};`}>
-          ${costMode ? formatCurrency(rowValue, currency, this._language) : this._formatKwh(rowValue)}
+          ${this._formatValue(rowValue, costMode, currency)}
         </div>
       </div>
     `;
@@ -556,6 +631,29 @@ export class M3TopConsumersCard extends TemplatedCard(LitElement) implements Lov
         font-size: 11px;
         opacity: 0.6;
         color: var(--m3p-secondary-text);
+      }
+
+      .live-gauge {
+        display: grid;
+        gap: 5px;
+      }
+
+      .live-track {
+        display: flex;
+        height: 10px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: var(--divider-color, var(--tc-row-bg));
+      }
+
+      .live-segment {
+        flex: 0 0 auto;
+      }
+
+      .live-note {
+        color: var(--m3p-secondary-text);
+        font-size: 11px;
+        text-align: end;
       }
 
       .row-list {
