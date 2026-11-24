@@ -445,7 +445,10 @@ export class M3ClimateCardMini extends TemplatedCard(LitElement) implements Love
     // and no `temperature` at all, which this card used to read as "no target"
     // and print as a dash (issue #21).
     const target = readClimateTarget(attrs);
-    const step = attrs.target_temp_step ?? DEFAULT_TEMP_STEP;
+    const overrideStep = this._config.temperature_step;
+    const step = typeof overrideStep === "number" && Number.isFinite(overrideStep) && overrideStep > 0
+      ? overrideStep
+      : (attrs.target_temp_step ?? DEFAULT_TEMP_STEP);
     const minTemp = attrs.min_temp ?? 7;
     const maxTemp = attrs.max_temp ?? 35;
     const radius = resolveCornerRadius(

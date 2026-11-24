@@ -609,6 +609,7 @@ enough. An unavailable sensor drops the segment rather than printing a dash.
 | `entity` | string | **Required** | `climate.*` entity |
 | `name` | string | entity `friendly_name` | Displayed name |
 | `icon` | string | `mdi:radiator` (heating only) / `mdi:air-conditioner` | Icon in the icon tile |
+| `temperature_step` | positive number | the thermostat's step, or `0.5` if unspecified | Optional YAML-only override for `−` / `+`, in Home Assistant's temperature unit. Set `temperature_step: 1` for an Ecobee that only accepts whole °F setpoints. |
 | `show_humidity` | boolean | `false` | Add the humidity to the status line, next to the temperature |
 | `humidity_sensor` | string | – | Where that humidity comes from. Most thermostats report none of their own, so this is usually the room's sensor. Setting it turns the reading on by itself |
 | `glass_background` | boolean | `true` | Frosted glass background (off for solid themes) |

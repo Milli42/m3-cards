@@ -176,6 +176,8 @@ export interface M3ClimateCardMiniConfig extends DetailModeConfig {
   entity: string;
   name?: string;
   icon?: string;
+  /** Override the thermostat's step in Home Assistant's temperature unit. */
+  temperature_step?: number;
   /** A humidity reading for the status line. Most thermostats report none —
    * point this at the room's own sensor. Where the thermostat does carry
    * `current_humidity`, `show_humidity: true` is enough on its own. */

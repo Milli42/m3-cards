@@ -17,6 +17,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   first touch movement. They follow the finger until release; vertical swipes
   still scroll without changing the value.
 
+## [2.19.2] – 2026-11-24
+
+### Fixed
+
+- **Climate Card Mini** supports a per-card `temperature_step` override. Set it
+  to `1` for Ecobee thermostats that require whole-degree Fahrenheit changes.
+
 ## [2.16.0] – 2026-11-19
 
 ### Added
