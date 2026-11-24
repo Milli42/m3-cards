@@ -2353,6 +2353,25 @@ export interface M3ClockCardConfig {
   card_version?: string;
 }
 
+export interface EnergyCostRowConfig {
+  name?: string;
+  icon?: string;
+  color?: string;
+  today_cost?: string;
+  today_energy?: string;
+  month_cost?: string;
+  month_energy?: string;
+}
+
+export interface M3EnergyCostCardConfig {
+  type: "custom:m3-energy-cost-card";
+  name?: string;
+  currency?: string;
+  glass_background?: boolean;
+  rows: EnergyCostRowConfig[];
+  card_version?: string;
+}
+
 export type M3CardConfig =
   | M3NavCardConfig
   | M3DetailCardConfig
@@ -2367,6 +2386,7 @@ export type M3CardConfig =
   | M3PowerListCardConfig
   | M3PowerSummaryCardConfig
   | M3TopConsumersCardConfig
+  | M3EnergyCostCardConfig
   | M3CostCardConfig
   | M3LightCardConfig
   | M3BatteryCardConfig

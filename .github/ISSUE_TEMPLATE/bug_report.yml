@@ -26,6 +26,7 @@ body:
         - Cover (m3-cover-card)
         - Detail (m3-detail-card)
         - Energy (m3-energy-card)
+        - Energy & Cost (m3-energy-cost-card)
         - Energy Flow (m3-energy-flow-card)
         - Energy usage (m3-energy-usage-card)
         - Gauge (m3-gauge-card)

@@ -17,6 +17,14 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   first touch movement. They follow the finger until release; vertical swipes
   still scroll without changing the value.
 
+## [2.22.0] – 2026-11-24
+
+### Added
+
+- **Energy & Cost** shows Today and Month costs with energy use beneath them.
+  Select your existing sensors for each row in the visual editor. The selected
+  sensor determines the monthly reset date.
+
 ## [2.21.0] – 2026-11-24
 
 ### Added
