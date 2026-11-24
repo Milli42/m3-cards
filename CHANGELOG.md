@@ -17,6 +17,14 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   first touch movement. They follow the finger until release; vertical swipes
   still scroll without changing the value.
 
+## [2.21.0] – 2026-11-24
+
+### Added
+
+- **Availability** can hide when no unmuted device needs attention. Enable
+  **Display → Only show when attention is needed** or set `hide_when_ok: true`.
+  The card returns when a device goes offline or is flagged as quiet.
+
 ## [2.20.0] – 2026-11-24
 
 ### Added
