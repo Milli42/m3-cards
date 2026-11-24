@@ -35,6 +35,7 @@ import { openEntityDetail } from "./shared/entity-detail";
 import { navigateTo } from "./shared/actions";
 import { openDropdownMenu } from "./shared/dropdown-menu";
 import { showSnackbar } from "./shared/snackbar";
+import { fireEvent } from "./shared/editor-helpers";
 import {
   buildWatchIndex,
   evaluateUnits,
@@ -82,6 +83,7 @@ const FLIP_MS = 260;
 @customElement("m3-availability-card")
 export class M3AvailabilityCard extends TemplatedCard(LitElement) implements LovelaceCard {
   @property({ attribute: false }) public hass?: HomeAssistant;
+  @property({ type: Boolean }) public preview = false;
 
   @state() private _config?: M3AvailabilityCardConfig;
   @state() private _filter = "all";
@@ -97,7 +99,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
   private _index: WatchedUnit[] = [];
   private _indexKey?: unknown[];
   private _flagged: FlaggedUnit[] = [];
-  private _signature = "";
+  private _signature?: string;
   private _historyAsked = new Set<string>();
   private _rects?: Map<string, DOMRect>;
   private _holdTimer?: number;
@@ -124,6 +126,11 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
 
   public getGridOptions(): LovelaceGridOptions {
     return { columns: 12, rows: "auto", min_columns: 6 };
+  }
+
+  // Keep receiving state and timer updates while Lovelace hides the wrapper.
+  public get connectedWhileHidden(): boolean {
+    return this._config?.hide_when_ok === true || this.hasAttribute("hidden");
   }
 
   public connectedCallback(): void {
@@ -168,7 +175,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         entityName: (id) => (hass.states[id]?.attributes?.friendly_name as string | undefined) ?? id,
       },
     );
-    this._signature = "";
+    this._signature = undefined;
   }
 
   private _evaluate(): void {
@@ -232,7 +239,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
         if (found.at !== undefined) next.set(f.unit.key, found.at);
       }
       this._realSince = next;
-      this._signature = "";
+      this._signature = undefined;
     } catch {
       // No recorder, or no access: last_changed stands.
     }
@@ -275,6 +282,12 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
     if (sig !== this._signature || changed.has("_now") || changed.has("_config") || changed.has("_realSince")) {
       this._signature = sig;
       this._evaluate();
+    }
+    const hidden = this._config.hide_when_ok === true && !this.preview &&
+      !this._flagged.some((f) => !isMuted(this._mutes, f.unit.key, this._now));
+    if (hidden !== this.hasAttribute("hidden")) {
+      this.toggleAttribute("hidden", hidden);
+      fireEvent(this, "card-visibility-changed", { value: !hidden });
     }
     if (this._animate) this._rects = captureRowRects(this.renderRoot);
   }
@@ -480,7 +493,7 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
   protected render() {
     const cfg = this._config;
     const hass = this.hass;
-    if (!cfg || !hass) return nothing;
+    if (!cfg || !hass || this.hasAttribute("hidden")) return nothing;
 
     const recentMs = (cfg.recent_minutes ?? DEFAULT_AVAILABILITY_RECENT_MINUTES) * 60_000;
     const criticalHours = cfg.critical_hours ?? DEFAULT_AVAILABILITY_CRITICAL_HOURS;
@@ -656,6 +669,9 @@ export class M3AvailabilityCard extends TemplatedCard(LitElement) implements Lov
     listRowStyles,
     compactStatusStyles,
     css`
+      :host([hidden]) {
+        display: none;
+      }
       .card-inner {
         gap: var(--m3-card-gap, 12px);
       }

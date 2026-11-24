@@ -112,6 +112,7 @@ export class M3AvailabilityCardEditor extends LitElement implements LovelaceCard
 
   private _displaySchema(): SchemaEntry[] {
     return [
+      { name: "hide_when_ok", selector: { boolean: {} } },
       { name: "show_filters", selector: { boolean: {} } },
       { name: "max_items", selector: { number: { min: 0, max: 100, mode: "box" } } },
     ];
@@ -135,6 +136,7 @@ export class M3AvailabilityCardEditor extends LitElement implements LovelaceCard
       exclude_entities: "editor_avail_exclude_entities",
       stale_hours: "editor_avail_stale_hours",
       stale_integrations: "editor_avail_stale_integrations",
+      hide_when_ok: "editor_avail_hide_when_ok",
       show_filters: "editor_avail_show_filters",
       max_items: "editor_avail_max_items",
       ...radiusLabelMap,
@@ -255,7 +257,11 @@ export class M3AvailabilityCardEditor extends LitElement implements LovelaceCard
       exclude_entities: (c.exclude?.entities ?? []).join("\n"),
     };
     const stale = { stale_hours: c.stale_hours ?? 0, stale_integrations: c.stale_integrations ?? [] };
-    const display = { show_filters: c.show_filters !== false, max_items: c.max_items ?? DEFAULT_AVAILABILITY_MAX_ITEMS };
+    const display = {
+      hide_when_ok: c.hide_when_ok === true,
+      show_filters: c.show_filters !== false,
+      max_items: c.max_items ?? DEFAULT_AVAILABILITY_MAX_ITEMS,
+    };
     return html`
       <div class="card-config">
         ${this._panel("editor_avail_general", "mdi:wifi-off", general, this._generalSchema(), (e) => this._valueChanged(e), true)}

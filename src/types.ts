@@ -2126,6 +2126,8 @@ export interface M3AvailabilityCardConfig extends DetailModeConfig {
   stale_hours?: number;
   /** The integrations silence is checked for; nothing else is. */
   stale_integrations?: string[];
+  /** Hide the card when no unmuted device needs attention. @default false */
+  hide_when_ok?: boolean;
   /** Integration chips above the list. @default true */
   show_filters?: boolean;
   /** Rows before "+N more". @default 10 */

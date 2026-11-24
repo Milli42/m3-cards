@@ -54,6 +54,14 @@ critical_hours: 12
 `include` takes the same four lists; when it is set, only that part of the
 install is watched.
 
+### Only show when attention is needed
+
+In the card editor, turn on **Display → Only show when attention is needed**,
+or set `hide_when_ok: true` in YAML. The card reappears when an unmuted
+device is offline or flagged as quiet. If all flagged devices are muted,
+the card is hidden; you can still undo a new mute from its snackbar or
+manage mutes from the card preview in dashboard edit mode.
+
 ### Muting
 
 The bell on a row mutes it for `mute_default` (24 hours unless set
@@ -102,6 +110,7 @@ stale_integrations: [zigbee2mqtt]
 | `critical_hours` | number | `24` | From here a device is shown in the error colour |
 | `stale_hours` | number | – (off) | Flag devices that have not reported for this long |
 | `stale_integrations` | list | `[]` | The integrations `stale_hours` applies to |
+| `hide_when_ok` | boolean | `false` | Hide the card when no unmuted device needs attention |
 | `show_filters` | boolean | `true` | Integration chips, when more than one integration is involved |
 | `max_items` | number | `10` | Rows before "+N more"; `0` shows all |
 | `mute_default` | `1h` \| `24h` \| `7d` \| `forever` \| `permanent` | `24h` | What a tap on the bell mutes for (`forever`: until back online) |
