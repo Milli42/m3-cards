@@ -4308,6 +4308,62 @@ states:
 With no rules at all the state is shown as it reads, tidied up: `heavy_duty`
 becomes "Heavy duty", a number keeps its unit.
 
+### Example: compact washer and dryer tiles
+
+Use `compact: true` for a single-row tile with the appliance icon and time left
+under the name. If the time is unknown, the tile shows the status instead.
+The progress sensors still work, but the bar, controls and other
+blocks are hidden. The tile is half a section wide by default. Add each example
+as a separate dashboard card so Home Assistant can hide it independently.
+Replace the example entities and the raw `run` state with the ones from your
+installation. For a binary running sensor, use `"on"` rather than `run`.
+
+```yaml
+type: custom:m3-appliance-card
+entity: sensor.dryer_state
+name: Dryer
+icon: mdi:tumble-dryer
+accent_color: orange
+compact: true
+show_end_time: false
+spin_states: [run]
+states:
+  - { value: run, label: Drying }
+progress:
+  remaining_entity: sensor.dryer_minutes_left
+visibility:
+  - condition: state
+    entity: sensor.dryer_state
+    state: run
+```
+
+```yaml
+type: custom:m3-appliance-card
+entity: sensor.washer_state
+name: Washer
+icon: mdi:washing-machine
+accent_color: cyan
+compact: true
+show_end_time: false
+spin_states: [run]
+states:
+  - { value: run, label: Washing }
+progress:
+  remaining_entity: sensor.washer_completion_time
+visibility:
+  - condition: state
+    entity: sensor.washer_state
+    state: run
+```
+
+`spin_states` is an opt-in YAML list. Match the raw states that actually mean
+the machine is moving, leaving out states like `pause`. It also works on the
+full-size card and respects `animation: off` and system reduced-motion settings.
+Home Assistant's `visibility` condition, not the timer, hides the tile when the
+machine stops. If only an attribute says the machine is running, use a template
+binary sensor for the visibility condition or keep your existing conditional
+wrapper.
+
 ### Example: a washing machine
 
 Status, progress and the two buttons that matter. `remaining_entity` takes
@@ -4857,6 +4913,8 @@ does nothing. Notifications need an entity, so the editor blocks them here.
 | `finish_action` | — | The "Emptied" button on a finished machine; without it there is none |
 | `finish_label` | "Emptied" | The button's text |
 | `show_end_time` | `true` | "done at HH:MM" under the remaining time |
+| `compact` | `false` | Single-row header tile; shows time left when available, state otherwise |
+| `spin_states` | — | Raw running states (case-insensitive) that spin the header icon |
 | `cards` | — | Other cards drawn inside, under the readings — written as in a view; the `cards` block, which folds with the rest |
 | `layout` | all five | Which blocks, in which order |
 | `collapsible` | `false` | A chevron in the header that folds the blocks away |

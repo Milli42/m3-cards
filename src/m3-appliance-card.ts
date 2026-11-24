@@ -45,6 +45,8 @@ import {
   APPLIANCE_HANDLE_HEIGHT,
   APPLIANCE_HANDLE_RADIUS,
   APPLIANCE_HANDLE_WIDTH,
+  APPLIANCE_COMPACT_PADDING_Y,
+  APPLIANCE_ICON_SPIN_MS,
   APPLIANCE_ICON_TINT,
   APPLIANCE_INDETERMINATE_FRACTION,
   APPLIANCE_INDETERMINATE_MS,
@@ -312,7 +314,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
 
   public setConfig(config: M3ApplianceCardConfig): void {
     if (!config) throw new Error("m3-appliance-card: invalid configuration");
-    for (const key of ["sliders", "selects", "buttons", "chips"] as const) {
+    for (const key of ["sliders", "selects", "buttons", "chips", "spin_states"] as const) {
       const value = config[key];
       if (value !== undefined && !Array.isArray(value)) {
         throw new Error(`m3-appliance-card: '${key}' must be a list`);
@@ -349,6 +351,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
   public getCardSize(): number {
     const cfg = this._config;
     if (!cfg) return 3;
+    if (cfg.compact) return 1;
     return (
       2 +
       (cfg.progress ? 1 : 0) +
@@ -360,6 +363,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
   }
 
   public getGridOptions(): LovelaceGridOptions {
+    if (this._config?.compact) return { columns: 6, min_columns: 6, rows: "auto", min_rows: 1 };
     return { columns: "full", rows: "auto", min_rows: 2 };
   }
 
@@ -560,6 +564,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
   }
 
   private get _layout(): ApplianceBlock[] {
+    if (this._config?.compact) return [];
     const layout = this._config?.layout?.length ? this._config.layout : DEFAULT_LAYOUT;
     // A layout written before the cards block existed still shows cards that
     // were added later, at the end, rather than dropping them silently.
@@ -568,10 +573,11 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
 
   /** Builds the nested cards when their config changes, and only then. */
   private async _syncCards(): Promise<void> {
-    const key = JSON.stringify(this._config?.cards ?? []);
+    const cards = this._config?.compact ? [] : (this._config?.cards ?? []);
+    const key = JSON.stringify(cards);
     if (key === this._cardsFor) return;
     this._cardsFor = key;
-    this._cards = await createCards(this._config?.cards ?? [], this._hass);
+    this._cards = await createCards(cards, this._hass);
     // Home Assistant sets the config before hass, and building is async: the
     // hass that arrived meanwhile has to be pushed again.
     updateCardsHass(this._cards, this._hass);
@@ -822,6 +828,10 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
     // A new run, or a machine emptied, starts the "Done … ago" clock afresh.
     if (phase !== "done" && !unavailable && !tile) this._forgetDone();
     const remaining = phase === "running" ? progress?.remaining : undefined;
+    const animate = shouldAnimate(cfg.animation);
+    const spinning =
+      !tile && phase === "running" && animate &&
+      cfg.spin_states?.some((state) => String(state).toLowerCase() === raw);
 
     // Decide how the wave behaves this render, before anything draws one.
     //
@@ -830,13 +840,13 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
     // runs only while there is progress still to make, which is the same rule
     // m3-progress-card uses, and stops entirely under reduced motion — the
     // shape survives, the movement does not.
-    const wavy = this._wavy;
+    const wavy = !cfg.compact && this._wavy;
     const progressMoving =
       !!progress && (progress.indeterminate || (progress.percent ?? 0) < 100);
     this._phaseAnimating =
       wavy &&
       !this._reducedMotion &&
-      shouldAnimate(cfg.animation) &&
+      animate &&
       progressMoving &&
       this._layout.includes("progress");
     this._targetAmplitude = wavy && !unavailable ? APPLIANCE_WAVE_AMPLITUDE : 0;
@@ -874,6 +884,14 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
         }
       : undefined;
     const doneSubtitle = phase === "done" && !unavailable ? this._doneSince(done) : undefined;
+    const compactCountdown =
+      cfg.compact && remaining !== undefined
+        ? html`<span class="compact-countdown">
+            <span class="reading-value">${this._durationParts(remaining)}</span>${cfg.show_end_time === false
+              ? nothing
+              : html` · ${this._endCaption()}`}
+          </span>`
+        : undefined;
     // Done and idle say so in a pill, and on a card that folds the pill is the
     // fold: a chevron at its end, the whole pill the button. A running machine
     // shows its time instead, with the suite's chevron beside it.
@@ -890,7 +908,7 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
         : html`<span class="done-pill ${cls}"><ha-icon icon=${icon}></ha-icon>${text}</span>`;
     const trailing =
       phase === "running"
-        ? remaining === undefined && !foldable
+        ? cfg.compact || (remaining === undefined && !foldable)
           ? undefined
           : html`<div class="header-trailing">
               ${remaining === undefined
@@ -918,18 +936,18 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
         <div
           class="card-inner phase-${phase} ${glassCardClass(cfg.glass_background)} ${
             unavailable ? "off" : ""
-          } ${this._narrow ? "narrow" : ""} ${shouldAnimate(cfg.animation) ? "" : "no-animations"}"
+          } ${this._narrow ? "narrow" : ""} ${animate ? "" : "no-animations"} ${cfg.compact ? "compact" : ""} ${spinning ? "spin-icon" : ""}"
           style=${`border-radius: ${radius};${cardBackgroundCss ? ` background: ${cardBackgroundCss};` : ""}`}
         >
           ${renderCardHeader({
             icon: rule?.icon ?? cfg.icon ?? DEFAULT_APPLIANCE_ICON,
             name,
-            subtitle: doneSubtitle ?? (phase === "ready" ? (this._readySince() ?? "") : subtitle),
+            subtitle: compactCountdown ?? doneSubtitle ?? (phase === "ready" ? (this._readySince() ?? "") : subtitle),
             onClick: onHeader,
             wrapName: cfg.name_wrap,
             right: trailing,
           })}
-          ${phase === "done" ? this._renderFinish() : nothing}
+          ${phase === "done" && !cfg.compact ? this._renderFinish() : nothing}
           ${blocks
             .filter(({ block }) => !foldHides(block, folded && foldable, cfg.collapse_blocks))
             .map(({ body }) => body)}
@@ -1559,6 +1577,30 @@ export class M3ApplianceCard extends TemplatedCard(LitElement) implements Lovela
 
     .card-inner.off {
       opacity: 0.5;
+    }
+
+    .card-inner.compact {
+      justify-content: center;
+      padding: var(--m3-group-padding, ${APPLIANCE_COMPACT_PADDING_Y}px 12px);
+    }
+
+    .compact-countdown .reading-value,
+    .compact-countdown .reading-unit {
+      font-size: ${APPLIANCE_CAPTION_SIZE + 2}px;
+    }
+
+    .m3-subtitle:has(.compact-countdown) {
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .spin-icon .m3-icon-swatch ha-icon {
+        animation: appliance-icon-spin ${APPLIANCE_ICON_SPIN_MS}ms linear infinite;
+      }
+    }
+
+    @keyframes appliance-icon-spin {
+      to { transform: rotate(1turn); }
     }
 
     /* ---- header right-hand reading ---- */

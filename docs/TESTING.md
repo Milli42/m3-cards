@@ -1135,6 +1135,12 @@ Die Karte setzt nichts über das Gerät voraus, also ist der Prüfgegenstand der
 leere Fall: was passiert, wenn ein Block nicht konfiguriert oder seine Entität
 weg ist.
 
+- [ ] `compact: true` — Name und Restzeit (oder Zustand) in einer Kachel, keine
+      Balken, Schalter oder Unterkarten. Im Sections-Layout zwei Kacheln
+      nebeneinander prüfen; auf dem Handy darf die Restzeit nicht abgeschnitten sein.
+- [ ] `spin_states: [run]` — Icon dreht sich bei `run`, nicht bei `pause`,
+      `finished`, `idle` oder `unavailable`. `animation: off` und reduzierte
+      Bewegung stoppen die Drehung. Dashboard-Sichtbarkeit getrennt mit `visibility` prüfen.
 - [ ] `layout: [progress, buttons]` — bestimmt Reihenfolge **und** Sichtbarkeit.
       Was nicht in der Liste steht, wird nicht gezeichnet; es gibt dafür keine
       zweiten `show_*`-Schalter, die widersprechen könnten

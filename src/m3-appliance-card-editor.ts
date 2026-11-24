@@ -607,6 +607,7 @@ export class M3ApplianceCardEditor extends LitElement implements LovelaceCardEdi
       { name: "finish_action", selector: { ui_action: {} } },
       { name: "finish_label", selector: { text: {} } },
       { name: "show_end_time", selector: { boolean: {} } },
+      { name: "compact", selector: { boolean: {} } },
     ];
   }
 
@@ -779,6 +780,7 @@ export class M3ApplianceCardEditor extends LitElement implements LovelaceCardEdi
       finish_action: "editor_appliance_finish_action",
       finish_label: "editor_appliance_finish_label",
       show_end_time: "editor_appliance_show_end_time",
+      compact: "editor_appliance_compact",
       percentage_entity: "editor_appliance_percentage_entity",
       remaining_entity: "editor_appliance_remaining_entity",
       label: "editor_appliance_label",
@@ -906,6 +908,7 @@ export class M3ApplianceCardEditor extends LitElement implements LovelaceCardEdi
                 finish_action: cfg.finish_action,
                 finish_label: cfg.finish_label ?? "",
                 show_end_time: cfg.show_end_time ?? true,
+                compact: cfg.compact ?? false,
               }}
               .schema=${this._deviceSchema()}
               .computeLabel=${this._computeLabel}

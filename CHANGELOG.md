@@ -17,6 +17,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   first touch movement. They follow the finger until release; vertical swipes
   still scroll without changing the value.
 
+## [2.20.0] – 2026-11-24
+
+### Added
+
+- **Appliance** adds an opt-in compact tile with remaining time and an icon
+  that can spin in configured running states, for washers, dryers and more.
+
 ## [2.19.2] – 2026-11-24
 
 ### Fixed

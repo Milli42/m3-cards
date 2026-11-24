@@ -11,7 +11,7 @@ import {
   LEVEL_TRACK_RADIUS,
 } from "./shared/level-slider";
 
-export const CARD_VERSION = "2.19.2";
+export const CARD_VERSION = "2.20.0";
 
 export const DEFAULT_CLIMATE_RADIUS = RADIUS.cardHero;
 export const DEFAULT_MINI_RADIUS = RADIUS.card;
@@ -2287,6 +2287,9 @@ export const APPLIANCE_BAR_RADIUS = 5;
 /** How much of the track the indeterminate segment covers as it sweeps. */
 export const APPLIANCE_INDETERMINATE_FRACTION = 0.35;
 export const APPLIANCE_INDETERMINATE_MS = 1800;
+/** Slow rotation for a running appliance's header icon. */
+export const APPLIANCE_ICON_SPIN_MS = 2400;
+export const APPLIANCE_COMPACT_PADDING_Y = SPACING.segmentGap;
 
 /** Slider rows: the humidifier's handle on a plain track. */
 export const APPLIANCE_SLIDER_HEIGHT = HUMIDIFIER_SLIDER_HEIGHT;

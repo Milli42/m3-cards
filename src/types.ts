@@ -4083,6 +4083,10 @@ export interface M3ApplianceCardConfig extends NotifyConfigBase, DetailModeConfi
    * which cover Home Connect (`ready`, `inactive`) and SmartThings (`none`).
    */
   idle_states?: string[];
+  /** Only show the header; keep reading progress for the remaining time. */
+  compact?: boolean;
+  /** Raw running states in which the header icon should spin (case-insensitive). */
+  spin_states?: string[];
 
   progress?: ApplianceProgressConfig;
   sliders?: ApplianceSliderConfig[];
