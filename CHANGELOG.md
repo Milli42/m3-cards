@@ -17,6 +17,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   first touch movement. They follow the finger until release; vertical swipes
   still scroll without changing the value.
 
+## [2.23.0] – 2026-11-24
+
+### Added
+
+- **Energy Flow** water cards can show optional **Today** and **Month** water
+  usage totals directly below the live flow gauge, without a separate card.
+
 ## [2.22.1] – 2026-11-24
 
 ### Changed

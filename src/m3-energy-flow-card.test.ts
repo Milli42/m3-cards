@@ -63,11 +63,35 @@ describe("Energy Flow water layout", () => {
     card.onUpdate();
     expect(card.hass.callWS).not.toHaveBeenCalled();
     expect(card.values()).toEqual(expect.arrayContaining(["2.4", "gal/min", "Flowing", "width: 30%", "water-moving"]));
+    expect(card.values()).not.toContain("Today");
+    expect(card.values()).not.toContain("Month");
     const dispatch = vi.spyOn(card, "dispatchEvent");
     card.values().find((v): v is () => void => typeof v === "function")?.();
     expect(dispatch.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([{ entityId: "sensor.flow" }]);
     expect(card.getCardSize()).toBe(2);
     expect(card.getGridOptions().columns).toBe(6);
+  });
+
+  it("shows and updates each configured water total independently of the live flow", async () => {
+    const totals = { ...water, water_daily_entity: "sensor.today", water_monthly_entity: "sensor.month" };
+    const card = await createCard(totals);
+    const before = hass({ flow: ["0", "gal/min"], today: ["0", "gal"], month: ["1250.5", "L"] });
+    card.hass = before;
+    expect(card.values()).toEqual(expect.arrayContaining(["No flow", "Today", "0 gal", "Month", "1,250.5 L"]));
+    card.hass = { ...before, states: { ...before.states, "sensor.today": { ...before.states["sensor.today"], state: "unavailable" } } };
+    expect(card.acceptsHass(before)).toBe(true);
+    expect(card.values()).not.toContain("0 gal");
+    expect(card.values()).toContain("—");
+
+    const dispatch = vi.spyOn(card, "dispatchEvent");
+    card.values().filter((v): v is () => void => typeof v === "function").forEach(open => open());
+    expect(dispatch.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { entityId: "sensor.flow" }, { entityId: "sensor.today" }, { entityId: "sensor.month" },
+    ]);
+    const monthlyOnly = { ...totals, water_daily_entity: undefined };
+    card.setConfig(monthlyOnly);
+    expect(card.values()).not.toContain("Today");
+    expect(card.values()).toContain("1,250.5 L");
   });
 
   it.each([
@@ -84,7 +108,7 @@ describe("Energy Flow water layout", () => {
     expect(card.values()).not.toContain("water-moving");
   });
 
-  it("offers only the water sensor, scale and animation controls for the water layout", async () => {
+  it("offers flow and total sensors, scale and animation controls for the water layout", async () => {
     const { M3EnergyFlowCardEditor } = await import("./m3-energy-flow-card-editor");
     vi.stubGlobal("document", { documentElement: { lang: "en" } });
     class TestEditor extends M3EnergyFlowCardEditor {
@@ -94,7 +118,7 @@ describe("Energy Flow water layout", () => {
     editor.hass = hass({});
     editor.setConfig(water);
     const names = editor.values().flatMap(v => v && typeof v === "object" && "name" in v && "selector" in v ? [v.name] : []);
-    expect(names).toEqual(expect.arrayContaining(["layout", "water_entity", "water_max", "animation"]));
+    expect(names).toEqual(expect.arrayContaining(["layout", "water_entity", "water_daily_entity", "water_monthly_entity", "water_max", "animation"]));
     for (const omitted of ["source", "solar_entity", "show_header", "show_self_sufficiency", "flow_speed"]) {
       expect(names).not.toContain(omitted);
     }

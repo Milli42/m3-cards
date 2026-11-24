@@ -19,6 +19,9 @@ import {
   CARD_VERSION,
   DEFAULT_FLOW_RADIUS,
   DEFAULT_FLOW_ICON,
+  FLOW_WATER_TOTAL_RADIUS,
+  FLOW_WATER_TOTAL_MIN_HEIGHT,
+  FLOW_WATER_TOTAL_GAP,
   FLOW_NODE_PV_COLOR,
   FLOW_NODE_GRID_COLOR,
   FLOW_NODE_HOME_COLOR,
@@ -533,6 +536,8 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
       this._config?.home_entity,
       this._config?.grid_entity,
       this._config?.water_entity,
+      this._config?.water_daily_entity,
+      this._config?.water_monthly_entity,
     ]);
   }
 
@@ -597,7 +602,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         <ha-card style=${`${cssVars} border-radius: ${radius};`}>
           <div class="card-inner ${water ? "water-card" : "station"} ${glassCardClass(this._config.glass_background)}"
             style=${`border-radius: ${radius};${cardBackgroundCss ? ` background: ${cardBackgroundCss};` : ""}`}>
-            ${water ? this._renderWater() : html`
+            ${water ? html`${this._renderWater()}${this._renderWaterTotals()}` : html`
               ${showHeader ? renderCardHeader({ icon, name, subtitle }) : nothing}
               ${this._renderPowerStation({ pv: pvColor, grid: gridColor, home: homeColor, battery: batteryColor })}
             `}
@@ -737,6 +742,33 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
     return st ? html`
       <button class="water-layout flow-detail-button" type="button" @click=${() => openEntityDetail(this, id)}>${content}</button>
     ` : html`<div class="water-layout">${content}</div>`;
+  }
+
+  private _renderWaterTotals() {
+    const c = this._config!;
+    if (!c.water_daily_entity && !c.water_monthly_entity) return nothing;
+    const total = (id: string | undefined, label: string) => {
+      if (!id) return nothing;
+      const state = this.hass?.states[id];
+      const value = cssNumber(state?.state);
+      const unit = state?.attributes.unit_of_measurement;
+      const amount = value !== undefined && value >= 0
+        ? `${formatNumber(this._language, value, { maximumFractionDigits: 3 })}${typeof unit === "string" && unit ? ` ${unit}` : ""}`
+        : "—";
+      const content = html`
+        <span class="water-total-label">${label}</span>
+        <span class="water-total-value">${amount}</span>
+      `;
+      return state ? html`
+        <button class="flow-detail-button water-total" type="button" @click=${() => openEntityDetail(this, id)}>${content}</button>
+      ` : html`<div class="water-total">${content}</div>`;
+    };
+    return html`
+      <div class="water-totals">
+        ${total(c.water_daily_entity, this._t("flow_water_today"))}
+        ${total(c.water_monthly_entity, this._t("flow_water_month"))}
+      </div>
+    `;
   }
 
   private _renderPowerStation(colors: { pv: string; grid: string; home: string; battery: string }) {
@@ -1025,6 +1057,7 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
 
       .card-inner.water-card {
         padding: var(--m3-group-padding, 6px);
+        gap: ${FLOW_WATER_TOTAL_GAP}px;
       }
       .water-layout {
         display: grid;
@@ -1092,6 +1125,41 @@ export class M3EnergyFlowCard extends TemplatedCard(LitElement) implements Lovel
         background-color: color-mix(in srgb, var(--water-blue) 20%, transparent);
       }
       .water-fill { display: block; height: 100%; background-color: var(--water-blue); }
+      .water-totals {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+        gap: ${FLOW_WATER_TOTAL_GAP}px;
+        margin: 0 8px 2px;
+      }
+      .water-totals .water-total {
+        box-sizing: border-box;
+        display: grid;
+        align-content: center;
+        gap: 2px;
+        min-height: ${FLOW_WATER_TOTAL_MIN_HEIGHT}px;
+        padding: 5px 8px;
+        border-radius: ${FLOW_WATER_TOTAL_RADIUS}px;
+        background-color: color-mix(in srgb, var(--m3p-text) 5%, transparent);
+        text-align: start;
+        overflow-wrap: anywhere;
+      }
+      .water-total-label {
+        color: var(--m3p-secondary-text);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .water-total-value {
+        color: var(--m3p-text);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+      }
+      @media (hover: hover) {
+        .water-totals .flow-detail-button:hover {
+          background-color: color-mix(in srgb, var(--m3p-text) 10%, transparent);
+        }
+      }
       .card-inner.station {
         gap: 0;
         padding: var(--m3-group-padding, 6px);

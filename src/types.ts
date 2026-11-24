@@ -490,6 +490,9 @@ export interface M3EnergyFlowCardConfig extends DetailModeConfig {
   layout?: "full" | "compact" | "power-station" | "water";
   /** Current water flow rate sensor (not a cumulative water meter). */
   water_entity?: string;
+  /** Optional water volume used so far today and this month, respectively. */
+  water_daily_entity?: string;
+  water_monthly_entity?: string;
   /** Gauge scale maximum, in the water sensor's own units. */
   water_max?: number;
   /** The header with name and subtitle. Default: on for `full` only. */

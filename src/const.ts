@@ -11,7 +11,7 @@ import {
   LEVEL_TRACK_RADIUS,
 } from "./shared/level-slider";
 
-export const CARD_VERSION = "2.22.1";
+export const CARD_VERSION = "2.23.0";
 
 export const DEFAULT_CLIMATE_RADIUS = RADIUS.cardHero;
 export const DEFAULT_MINI_RADIUS = RADIUS.card;
@@ -506,6 +506,9 @@ export const DEFAULT_ENERGY_NOTIFY_TIME = "21:00:00";
 // the tolerance bands that map that span onto "daily" / "monthly".
 
 export const DEFAULT_FLOW_RADIUS = RADIUS.card;
+export const FLOW_WATER_TOTAL_RADIUS = RADIUS.squircle32;
+export const FLOW_WATER_TOTAL_MIN_HEIGHT = HEIGHT.toggle;
+export const FLOW_WATER_TOTAL_GAP = SPACING.segmentGap;
 export const DEFAULT_FLOW_ICON = "mdi:home-lightning-bolt-outline";
 export const FLOW_NODE_PV_COLOR = PALETTE.solar;
 export const FLOW_NODE_GRID_COLOR = PALETTE.grid;

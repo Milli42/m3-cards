@@ -119,11 +119,19 @@ monthly usage total). The card displays the current rate in the sensor's own uni
 with waves that move while the rate is positive and stay still at zero or when
 the sensor is unavailable. Tap the gauge to open the sensor's More info and history.
 
+To show usage under the gauge, set **Daily water usage sensor** to Flume's
+**Current day** and **Monthly water usage sensor** to **Current month**. Use the
+period totals, not the rolling **24 hours** or **30 days** sensors. Either field
+can be left blank. Each total keeps its own unit, shows `—` if unavailable, and
+opens its sensor details when tapped. The card does not calculate these totals.
+
 ```yaml
 type: custom:m3-energy-flow-card
 layout: water
 name: Flume Water Flow
 water_entity: sensor.flume_current_flow # replace with your current-flow entity
+water_daily_entity: sensor.flume_current_day # optional; replace with your daily total
+water_monthly_entity: sensor.flume_current_month # optional; replace with your monthly total
 water_max: 10 # scale maximum in the sensor's units, e.g. 10 gal/min
 ```
 
@@ -174,6 +182,8 @@ paused) when `animation: "off"` or `prefers-reduced-motion` is active.
 | `grid_invert` | boolean | `false` | `grid_entity` counts export as positive |
 | `layout` | `full` \| `compact` \| `power-station` \| `water` | `full` | `compact`: one row of flow nodes. `power-station`: direct sensor readings. `water`: current water flow gauge. Both direct layouts are independent of `source` |
 | `water_entity` | string | – | Current water flow rate sensor used in `water` |
+| `water_daily_entity` | string | – | Optional volume used today, shown in `water` |
+| `water_monthly_entity` | string | – | Optional volume used this month, shown in `water` |
 | `water_max` | number | `10` | Water gauge maximum, in the sensor's own units |
 | `detail_mode` | `more_info` \| `sheet` | `more_info` | Details opened when tapping a sensor in `power-station` or `water` |
 | `show_header` | boolean | `true` for `full` only | The header with name and subtitle |

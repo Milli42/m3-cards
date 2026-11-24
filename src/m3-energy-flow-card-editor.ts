@@ -50,6 +50,8 @@ export class M3EnergyFlowCardEditor extends LitElement implements LovelaceCardEd
     if (this._config?.layout === "water") {
       return [
         { name: "water_entity", selector: { entity: { domain: "sensor" } } },
+        { name: "water_daily_entity", selector: { entity: { domain: "sensor" } } },
+        { name: "water_monthly_entity", selector: { entity: { domain: "sensor" } } },
         { name: "name", selector: { text: {} } },
         { name: "icon", selector: { icon: {} } },
       ];
@@ -175,6 +177,8 @@ export class M3EnergyFlowCardEditor extends LitElement implements LovelaceCardEd
     const labelMap: Record<string, TranslationKey> = {
       source: "editor_flow_source",
       water_entity: "editor_flow_water_entity",
+      water_daily_entity: "editor_flow_water_daily_entity",
+      water_monthly_entity: "editor_flow_water_monthly_entity",
       water_max: "editor_flow_water_max",
       name: "editor_name",
       icon: "editor_icon",
@@ -236,7 +240,9 @@ export class M3EnergyFlowCardEditor extends LitElement implements LovelaceCardEd
   private _valueChanged(ev: CustomEvent): void {
     if (!this._config) return;
     const next: Record<string, unknown> = { ...this._config, ...ev.detail.value };
-    if ("water_entity" in ev.detail.value && !ev.detail.value.water_entity) delete next.water_entity;
+    for (const key of ["water_entity", "water_daily_entity", "water_monthly_entity"]) {
+      if (key in ev.detail.value && !ev.detail.value[key]) delete next[key];
+    }
     if (next.water_max === "" || next.water_max == null) delete next.water_max;
     // ha-form sends the whole form, including the previous layout's default.
     // Don't turn that default into a saved override when changing layouts.
@@ -303,6 +309,8 @@ export class M3EnergyFlowCardEditor extends LitElement implements LovelaceCardEd
     const water = this._config.layout === "water";
     const entitiesData = water ? {
       water_entity: this._config.water_entity,
+      water_daily_entity: this._config.water_daily_entity,
+      water_monthly_entity: this._config.water_monthly_entity,
       name: this._config.name,
       icon: this._config.icon,
     } : {
