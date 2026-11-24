@@ -11,6 +11,12 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
 - **Top Consumers** adds an opt-in Live period with a segmented power gauge,
   a current device ranking, and an optional whole-home power reading.
 
+### Fixed
+
+- **Lights Overview** brightness and fan speed sliders no longer stop at the
+  first touch movement. They follow the finger until release; vertical swipes
+  still scroll without changing the value.
+
 ## [2.16.0] – 2026-11-19
 
 ### Added

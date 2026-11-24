@@ -830,7 +830,11 @@ export class M3LightsOverviewCard extends TemplatedCard(LitElement) implements L
           e.stopPropagation();
           pointer.cancel(e);
         }}
-        @lostpointercapture=${pointer.cancel}
+        @lostpointercapture=${(e: PointerEvent) => {
+          // Touch first captures the track implicitly. Its capture loss bubbles
+          // here when we transfer capture to the slider to continue the drag.
+          if (e.target === e.currentTarget) pointer.cancel(e);
+        }}
         @click=${stopSwipe}
         @contextmenu=${stopSwipe}
         @touchstart=${stopSwipe}
