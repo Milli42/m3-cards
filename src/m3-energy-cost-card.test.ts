@@ -63,3 +63,14 @@ it("labels the existing monthly sensor Month without implying a calendar reset",
   expect(card.rendered()).toContain("Month");
   expect(card.rendered()).not.toContain("Month to date");
 });
+
+it("keeps the period labels and row icons without rendering a card title or icon", async () => {
+  const { card } = await setup();
+  card.setConfig({ type: "custom:m3-energy-cost-card", rows: [{ ...rows[0], icon: "mdi:home-lightning-bolt" }] });
+  const displayed = card.rendered();
+  expect(displayed).toContain("Today");
+  expect(displayed).toContain("Month");
+  expect(displayed).toContain("mdi:home-lightning-bolt");
+  expect(displayed).not.toContain("Energy & Cost");
+  expect(displayed).not.toContain("mdi:cash-lightning");
+});

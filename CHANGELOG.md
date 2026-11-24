@@ -17,6 +17,13 @@ Versionierung folgt [SemVer](https://semver.org/lang/de/).
   first touch movement. They follow the finger until release; vertical swipes
   still scroll without changing the value.
 
+## [2.22.1] – 2026-11-24
+
+### Changed
+
+- **Energy & Cost** no longer shows a card title or header icon, leaving more
+  room for the Today and Month readings.
+
 ## [2.22.0] – 2026-11-24
 
 ### Added

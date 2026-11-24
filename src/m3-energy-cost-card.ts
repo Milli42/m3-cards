@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing, unsafeCSS, type PropertyValues } from "
 import { customElement, property, state } from "lit/decorators.js";
 import { CARD_VERSION, DEFAULT_TOP_CONSUMERS_PALETTE, DEFAULT_TOP_CONSUMERS_RADIUS } from "./const";
 import { localize } from "./localize";
-import { cardHeaderStyles, renderCardHeader } from "./shared/card-header";
 import { buildCssVars, foregroundOn, resolveThemeColor, tintOn } from "./shared/color-config";
 import { formatNumber } from "./shared/formatting";
 import { glassCardClass, glassCardStyles } from "./shared/glass-card";
@@ -64,7 +63,7 @@ export class M3EnergyCostCard extends LitElement implements LovelaceCard<M3Energ
   }
 
   public getCardSize(): number {
-    return (this._config?.rows.length ?? 2) + 2;
+    return (this._config?.rows.length ?? 2) + 1;
   }
 
   protected shouldUpdate(changed: PropertyValues): boolean {
@@ -98,8 +97,7 @@ export class M3EnergyCostCard extends LitElement implements LovelaceCard<M3Energ
     };
     return html`
       <ha-card>
-        <div class="card-inner ${glassCardClass(config.glass_background)}" style=${well(DEFAULT_TOP_CONSUMERS_PALETTE[0])}>
-          ${renderCardHeader({ icon: "mdi:cash-lightning", name: config.name || localize("energy_cost_title", language), subtitle: "", wrapName: true })}
+        <div class="card-inner ${glassCardClass(config.glass_background)}">
           <div class="rows">
             <div class="comparison column-headings" aria-hidden="true"><span></span><span>${today}</span><span>${month}</span></div>
             ${config.rows.map((row, index) => html`
@@ -120,16 +118,13 @@ export class M3EnergyCostCard extends LitElement implements LovelaceCard<M3Energ
     `;
   }
 
-  static styles = [glassCardStyles, cardHeaderStyles, css`
+  static styles = [glassCardStyles, css`
     ha-card, .card-inner { border-radius: ${unsafeCSS(DEFAULT_TOP_CONSUMERS_RADIUS)}px; }
     .card-inner {
       container-type: inline-size;
-      --m3p-text: var(--primary-text-color);
       color: var(--primary-text-color);
     }
-    .m3-header { cursor: default; }
-    .m3-name { font-size: 17px; }
-    .m3-subtitle:empty { display: none; }
+
     .rows { display: grid; gap: 6px; }
     .comparison {
       display: grid;

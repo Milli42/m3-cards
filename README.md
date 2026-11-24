@@ -8888,7 +8888,7 @@ Assistant update changes that object — the cards just stop moving together.
 
 ## M3 Energy & Cost Card
 
-A cost-first summary that shows Today and Month side by side. Each row
+A compact, headerless summary that shows Today and Month side by side. Each row
 pairs the cost with the energy used. On narrow cards, the two periods move below
 the row name without hiding either one. Keep it above Top Consumers in Live mode
 to see the spending totals and the current power draw together.
@@ -8930,8 +8930,7 @@ rows:
   `currency` formats all costs and defaults to `USD`; it does not convert them.
 - Energy uses the sensor's unit of measurement, or `kWh` if it has none.
 - Unavailable, unknown, or missing readings show `—` instead of zero.
-- Optional `name` overrides the title; `glass_background: false` uses a solid
-  background.
+- `glass_background: false` uses a solid background.
 - Rows are not added together. If the home total already includes the truck,
   consider labeling the second row `Of which: truck charging`.
 

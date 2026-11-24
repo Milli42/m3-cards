@@ -2365,7 +2365,6 @@ export interface EnergyCostRowConfig {
 
 export interface M3EnergyCostCardConfig {
   type: "custom:m3-energy-cost-card";
-  name?: string;
   currency?: string;
   glass_background?: boolean;
   rows: EnergyCostRowConfig[];
